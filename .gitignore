@@ -1,0 +1,146 @@
+# ===== Project / build artifacts =====
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# General build output
+/build/
+/build-*/
+cmake-build-*/
+out/
+bin/
+lib/
+lib64/
+obj/
+
+
+# Visual Studio / MSVC
+.vs/
+*.vcxproj*
+*.sln
+*.user
+*.vcxproj.filters
+
+# CMake default build folders you already had
+bin/Debug/
+bin/MinSizeRel/
+bin/Release/
+bin/RelWithDebInfo/
+
+# OGRE runtime/generated data (ignore runtime asset outputs)
+bin/Data/
+Engine/bin/Data/
+*/bin/Data/
+
+# keep common HLMS/material generated packs ignored
+bin/Data/Hlms/Common/
+bin/Data/Hlms/Pbs/
+bin/Data/Hlms/Unlit/
+bin/Data/Materials/Common/
+bin/Data/DebugPack.zip
+bin/Data/resources2.cfg
+
+# Dependencies / third-party SDKs
+Dependencies/Ogre/
+Dependencies/ogre-next-deps/
+Dependencies/
+third_party/
+ThirdParty/
+vendor/
+
+# Xcode / macOS / iOS
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcuserdata/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+
+# macOS system files
+*.DS_Store
+*.AppleDouble
+*.LSOverride
+
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Other User/OS-specifics
+*.user
+*.suo
+*.swp
+
+# Editors / IDEs
+.idea/
+*.iml
+.vscode/
+*.sublime-workspace
+*.sublime-project
+*.sln
+
+# CLion / JetBrains caches
+cmake-build-*/
+
+# Backup / temp files
+*~
+*.swp
+*.tmp
+*.temp
+*.bak
+
+# Python
+__pycache__/
+*.py
+*.pyo
+.venv/
+env/
+venv/
+
+# Logs
+*.log
+
+# Packages / archives / installers
+*.7z
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# Binaries / libraries / executables
+*.o
+*.obj
+*.lo
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.app
+
+*.env
+
+# Generated IDE project files - ignore if you generate them
+*.xcodeproj
+*.xcconfig
+
+# Local configuration files
+local.properties
+*.local
+
+# Node (if used in tooling)
+node_modules/
+
+# Coverage / reports
+coverage/
+*.lcov
+
+# --- Engine Sources & Assets (must be kept in repo) ---
+!Assets/**
+!Config/**
+!Scripts/**
