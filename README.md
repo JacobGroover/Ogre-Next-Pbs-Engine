@@ -16,9 +16,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere)
 
-- Download the Engine_build_ogre_next_Visual_Studio_17_2022_x64.bat in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
+- Download the Engine_Build_Visual_Studio_17_2022_x64.bat in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
 
-- Run the Engine_build_ogre_next_Visual_Studio_17_2022_x64.bat file
+- Run the Engine_Build_Visual_Studio_17_2022_x64.bat file
 
 ---
 
