@@ -43,9 +43,6 @@ bin/Data/DebugPack.zip
 bin/Data/resources2.cfg
 
 # Dependencies / third-party SDKs
-Dependencies/Ogre/
-Dependencies/ogre-next-deps/
-Dependencies/
 third_party/
 ThirdParty/
 vendor/
