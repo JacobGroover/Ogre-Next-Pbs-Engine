@@ -3,23 +3,24 @@
 * text=auto
 
 # Scripts & source - force LF where appropriate
-*.sh    text eol=lf
-*.py    text eol=lf
-*.mm    text eol=lf
-*.m     text eol=lf
-*.mm    text eol=lf
-*.c     text
-*.cpp   text
-*.cc    text
-*.h     text
-*.hpp   text
-*.inl   text
-*.ipp   text
-*.tpp   text
-*.txt   text
-*.md    text
-*.cmake text
-CMakeLists.txt text
+*.sh     text eol=lf
+*.py     text eol=lf
+*.m      text eol=lf
+*.mm     text eol=lf
+*.c      text eol=lf
+*.cpp    text eol=lf
+*.cc     text eol=lf
+*.h      text eol=lf
+*.hpp    text eol=lf
+*.inl    text eol=lf
+*.ipp    text eol=lf
+*.tpp    text eol=lf
+*.glsl   text eol=lf
+*.metal  text eol=lf
+*.cmake  text eol=lf
+CMakeLists.txt text eol=lf
+*.txt    text eol=lf
+*.md     text eol=lf
 
 # Xcode / plist/storyboard are XML/text
 *.plist text
