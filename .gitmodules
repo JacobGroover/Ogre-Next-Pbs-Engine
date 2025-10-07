@@ -4,3 +4,6 @@
 [submodule "Dependencies/Ogre/ogre-next-deps"]
 	path = Dependencies/Ogre/ogre-next-deps
 	url = https://github.com/JacobGroover/ogre-next-deps.git
+[submodule "Dependencies/entt"]
+	path = Dependencies/entt
+	url = https://github.com/skypjack/entt.git

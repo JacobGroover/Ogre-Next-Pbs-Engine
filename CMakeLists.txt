@@ -44,9 +44,9 @@ else()
 	endmacro()
 endif()
 
-include_directories( "./include" )
+#include_directories( "./include" )
 # Ogre doesn't need this include, but we do because of Rapidjson in UnitTesting.cpp
-include_directories( "./Dependencies/Ogre/ogre-next/Dependencies/include" )
+#include_directories( "./Dependencies/Ogre/ogre-next/Dependencies/include" )
 
 add_recursive( ./src SOURCES )
 add_recursive( ./include HEADERS )
@@ -82,6 +82,13 @@ if( APPLE )
 endif()
 
 add_executable( ${PROJECT_NAME} WIN32 MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${RESOURCES} )
+
+target_include_directories( ${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/Dependencies
+    ${CMAKE_SOURCE_DIR}/Dependencies/Ogre/ogre-next/Dependencies/include
+)
+
 target_link_libraries( ${PROJECT_NAME} ${OGRE_LIBRARIES} )
 
 if( APPLE )
