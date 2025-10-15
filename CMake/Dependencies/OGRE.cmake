@@ -174,6 +174,10 @@ macro( setupPluginFileFromTemplate BUILD_TYPE OGRE_USE_SCENE_FORMAT OGRE_USE_PLA
 			set( OGRE_DLLS ${OGRE_DLLS} ${OGRE_NEXT}SceneFormat )
 		endif()
 
+    if( ${OGRE_USE_PLANAR_REFLECTIONS} )
+			set( OGRE_DLLS ${OGRE_DLLS} ${OGRE_NEXT}PlanarReflections )
+		endif()
+
 		if( NOT OGRE_BUILD_COMPONENT_ATMOSPHERE EQUAL -1 )
 			set( OGRE_DLLS ${OGRE_DLLS} ${OGRE_NEXT}Atmosphere )
 		endif()

@@ -24,6 +24,8 @@ endif()
 
 setupOgre( OGRE_SOURCE, OGRE_BINARIES, OGRE_LIBRARIES, FALSE, FALSE )
 
+add_subdirectory(Dependencies/entt)
+
 # Setup our application
 set( EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}" )
 if( MSVC )
@@ -90,6 +92,7 @@ target_include_directories( ${PROJECT_NAME} PRIVATE
 )
 
 target_link_libraries( ${PROJECT_NAME} ${OGRE_LIBRARIES} )
+target_link_libraries(${PROJECT_NAME} PRIVATE entt)
 
 if( APPLE )
 	set_target_properties( ${PROJECT_NAME} PROPERTIES XCODE_ATTRIBUTE_ENABLE_BITCODE "NO" )
