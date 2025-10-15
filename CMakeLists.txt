@@ -22,7 +22,7 @@ if( APPLE )
 	set( CMAKE_CXX_STANDARD 11 )
 endif()
 
-setupOgre( OGRE_SOURCE, OGRE_BINARIES, OGRE_LIBRARIES, FALSE, FALSE )
+setupOgre( OGRE_SOURCE, OGRE_BINARIES, OGRE_LIBRARIES, TRUE, TRUE )
 
 add_subdirectory(Dependencies/entt)
 
