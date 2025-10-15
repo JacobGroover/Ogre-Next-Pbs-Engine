@@ -90,8 +90,7 @@ target_include_directories( ${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Dependencies/Ogre/ogre-next/Dependencies/include
 )
 
-target_link_libraries( ${PROJECT_NAME} ${OGRE_LIBRARIES} )
-target_link_libraries(${PROJECT_NAME} PRIVATE entt)
+target_link_libraries( ${PROJECT_NAME} PRIVATE ${OGRE_LIBRARIES} entt )
 
 if( APPLE )
 	set_target_properties( ${PROJECT_NAME} PROPERTIES XCODE_ATTRIBUTE_ENABLE_BITCODE "NO" )
