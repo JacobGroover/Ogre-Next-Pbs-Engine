@@ -88,9 +88,10 @@ add_executable( ${PROJECT_NAME} WIN32 MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${RESO
 target_include_directories( ${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/Dependencies/Ogre/ogre-next/Dependencies/include
+    ${CMAKE_SOURCE_DIR}/Dependencies/entt/src
 )
 
-target_link_libraries( ${PROJECT_NAME} PRIVATE ${OGRE_LIBRARIES} entt )
+target_link_libraries( ${PROJECT_NAME} PRIVATE ${OGRE_LIBRARIES} )
 
 if( APPLE )
 	set_target_properties( ${PROJECT_NAME} PROPERTIES XCODE_ATTRIBUTE_ENABLE_BITCODE "NO" )
