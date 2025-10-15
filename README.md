@@ -83,8 +83,9 @@ Typical future rules are already in the .gitattributes
 | `OGRE_BUILD_COMPONENT_HLMS_UNLIT`         | BOOL     | `ON`        | Builds HLMS Unlit shading system.                                  |
 | `OGRE_BUILD_COMPONENT_MESHLODGENERATOR`   | BOOL     | `ON`        | Builds mesh LOD (level-of-detail) generator.                       |
 | `OGRE_BUILD_COMPONENT_OVERLAY`            | BOOL     | `ON`        | Builds overlay system (2D HUD/UI).                                 |
-| *`OGRE_BUILD_COMPONENT_PAGING`             | BOOL     | `ON`       | Builds paging/streaming terrain system.                            |
-| *`OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS` | BOOL     | `ON`       | Builds planar reflections component.                               |
+| `OGRE_BUILD_COMPONENT_PAGING`             | BOOL    | `OFF`        | <span style="color: red;">DEPRECATED. Builds paging/streaming terrain system.</span>                            |
+| `OGRE_BUILD_COMPONENT_TERRAIN`             | BOOL   | `OFF`        | <span style="color: red;">DEPRECATED. Builds Terrain component within the Ogre-Next engine (Heightmap-based terrain, Level of Detail (LOD), Layered texturing, Paging system).</span>                            |
+| *`OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS` | BOOL    | `ON`        | Builds planar reflections component.                               |
 | `OGRE_BUILD_COMPONENT_PROPERTY`           | BOOL     | `ON`        | Builds property system (serialization/config helpers).             |
 | `OGRE_BUILD_COMPONENT_SCENE_FORMAT`       | BOOL     | `ON`        | Enables scene format import/export component.                      |
 | `OGRE_BUILD_COMPONENT_VOLUME`             | BOOL     | `OFF`       | Builds volume rendering support.                                   |
