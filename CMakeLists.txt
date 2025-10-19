@@ -13,14 +13,15 @@
 cmake_minimum_required( VERSION 3.5.1 )
 project( Engine )
 
+# Set the C++ standard to C++17 (required by EnTT)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF) # Optional, but good practice
+
 set( EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}" )
 
 include( CMake/Bootstrap.cmake )
 include( CMake/Dependencies/OGRE.cmake )
-
-if( APPLE )
-	set( CMAKE_CXX_STANDARD 11 )
-endif()
 
 setupOgre( OGRE_SOURCE, OGRE_BINARIES, OGRE_LIBRARIES, TRUE, TRUE )
 
