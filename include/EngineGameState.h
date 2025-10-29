@@ -36,6 +36,9 @@ namespace Demo
         void update( float timeSinceLast ) override;
 
         void keyReleased( const SDL_KeyboardEvent &arg ) override;
+
+    private:
+        void loadSceneFromJson(const Ogre::String& filename);
     };
 }  // namespace Demo
 
