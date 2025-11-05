@@ -74,7 +74,13 @@ int Demo::MainEntryPoints::mainAppMultiThreaded( int argc, const char *argv[] )
 
     Ogre::Barrier barrier( 2 );
 
-    MainEntryPoints::createSystems( &graphicsGameState, &graphicsSystem, &logicGameState, &logicSystem );
+#if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
+    MainEntryPoints::createSystems(&graphicsGameState, &graphicsSystem, &logicGameState, &logicSystem,
+        __argc, (const char**)__argv);
+#else
+    MainEntryPoints::createSystems(&graphicsGameState, &graphicsSystem, &logicGameState, &logicSystem,
+        argc, argv);
+#endif
 
     GameEntityManager gameEntityManager( graphicsSystem, logicSystem );
 

@@ -89,8 +89,12 @@ namespace Demo
     }
     // --- End Helper Functions ---
 
-    EngineGameState::EngineGameState( const Ogre::String &helpDescription ) :
-        TutorialGameState( helpDescription )
+    EngineGameState::EngineGameState(const Ogre::String& helpDescription,
+        int argc, const char* argv[]) :
+        TutorialGameState( helpDescription ),
+        mSceneToLoad( "scene.json" ),  // Default scene if no argument is provided
+		mArgc( argc ),
+        mArgv( argv )
     {
     }
     //-----------------------------------------------------------------------------------
@@ -101,58 +105,45 @@ namespace Demo
         Ogre::Root* root = mGraphicsSystem->getRoot();
 
         // --- Load JSON File using Ogre Resource System ---
-        Ogre::DataStreamPtr stream;
+        // 1. Attempt to load as an absolute/relative path from the filesystem
         std::string jsonData;
-        try {
-            // Open the resource using the resource group manager
-            stream = Ogre::ResourceGroupManager::getSingleton().openResource(
-                filename, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, true); // 'true' makes it search recursively
+        std::ifstream inFile(filename.c_str(), std::ios::binary | std::ios::in);
 
-            if (!stream) // Check if the stream is null
-            {
-                throw Ogre::FileNotFoundException(0, "Could not open scene file via ResourceGroupManager: " + filename, __FUNCTION__, __FILE__, __LINE__);
+        if (inFile.is_open())
+        {
+            Ogre::LogManager::getSingleton().logMessage("Loading scene from direct file path.");
+            inFile.seekg(0, std::ios::end);
+            jsonData.resize(static_cast<size_t>(inFile.tellg()));
+            inFile.seekg(0, std::ios::beg);
+            inFile.read(&jsonData[0], static_cast<std::streamsize>(jsonData.size()));
+            inFile.close();
+        }
+        else
+        {
+            // 2. If direct open failed, try Ogre's resource system
+            Ogre::LogManager::getSingleton().logMessage("Direct file path failed. Trying Ogre resource system for: " + filename);
+            Ogre::DataStreamPtr stream;
+            try {
+                stream = Ogre::ResourceGroupManager::getSingleton().openResource(
+                    filename, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, true);
+
+                if (!stream)
+                {
+                    throw Ogre::FileNotFoundException(0, "Could not open scene file via ResourceGroupManager: " + filename, __FUNCTION__, __FILE__, __LINE__);
+                }
+
+                jsonData = stream->getAsString();
+                stream->close();
             }
-
-            // Read the entire stream into the string
-            jsonData = stream->getAsString();
-            stream->close(); // Close the stream explicitly
-
+            catch (Ogre::Exception& e) {
+                Ogre::LogManager::getSingleton().logMessage("Could not open/find scene file '" + filename + "' using direct path or resource system. Error: " + e.getFullDescription(), Ogre::LML_CRITICAL);
+                throw; // Rethrow the exception
+            }
         }
-        catch (Ogre::FileNotFoundException& e) {
-            Ogre::LogManager::getSingleton().logMessage("Could not open/find scene file '" + filename + "' in any resource location: " + e.getDescription(), Ogre::LML_CRITICAL);
-            // Optionally throw or handle error appropriately
-            throw; // Rethrow the exception
-            // return; // Or simply return if you want to allow empty scene on failure
-        }
-        catch (Ogre::Exception& e) {
-            Ogre::LogManager::getSingleton().logMessage("Ogre Exception while opening scene file '" + filename + "': " + e.getFullDescription(), Ogre::LML_CRITICAL);
-            throw; // Rethrow the exception
-            // return;
-        }
-        //std::string jsonData;
-        //Ogre::FileSystemLayer fsLayer(OGRE_VERSION_NAME);
-        //std::ifstream inFile(fsLayer.getConfigFilePath(filename), std::ios::binary | std::ios::in); // Prefer using Ogre's file system abstraction
-
-        //if (!inFile.is_open())
-        //{
-        //    Ogre::LogManager::getSingleton().logMessage(
-        //        "WARNING: Could not open scene file: " + filename, Ogre::LML_CRITICAL);
-        //    // Optionally throw or handle error appropriately
-        //    throw Ogre::Exception(Ogre::Exception::ERR_FILE_NOT_FOUND, "Could not open scene file: " + filename, __FUNCTION__);
-        //    // return; // Or simply return if you want to allow empty scene on failure
-        //}
-
-        //inFile.seekg(0, std::ios::end);
-        //jsonData.resize(static_cast<size_t>(inFile.tellg()));
-        //inFile.seekg(0, std::ios::beg);
-        //inFile.read(&jsonData[0], static_cast<std::streamsize>(jsonData.size()));
-        //inFile.close();
 
         // --- Parse JSON ---
         rapidjson::Document document;
-        // Use ParseInsitu for slightly better performance if jsonData won't be needed afterwards
-        // document.ParseInsitu(&jsonData[0]);
-        document.Parse(jsonData.c_str());   // Use standard Parse if jsonData might be needed
+        document.Parse(jsonData.c_str());
 
         if (document.HasParseError())
         {
@@ -164,6 +155,7 @@ namespace Demo
             throw Ogre::Exception(Ogre::Exception::ERR_INVALIDPARAMS, "JSON parse error in " + filename, __FUNCTION__);
             // return;
         }
+        // ____________________________________
 
         // --- Process Scene Settings ---
         if (document.HasMember("scene_settings") && document["scene_settings"].IsObject())
@@ -411,8 +403,26 @@ namespace Demo
         Ogre::LogManager::getSingleton().logMessage("Finished loading scene from JSON.", Ogre::LML_TRIVIAL);
     }
     //-----------------------------------------------------------------------------------
+    void EngineGameState::parseCommandLineArgs(int argc, const char* argv[])
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            // Check for the --scene argument
+            if (Ogre::String(argv[i]) == "--scene" && (i + 1) < argc)
+            {
+                mSceneToLoad = argv[i + 1];
+                Ogre::LogManager::getSingleton().logMessage(
+                    "Command line: Loading scene " + mSceneToLoad);
+                ++i;  // Increment 'i' again to skip the path argument in the next loop
+            }
+        }
+    }
+    //-----------------------------------------------------------------------------------
     void EngineGameState::createScene01()
     {
+        // Parse command line arguments to get scene file
+        parseCommandLineArgs(mArgc, mArgv);
+
         // --- 1. Create HLMS Materials (Keep this or move to a separate loading step) ---
         // It's often better to load/create materials *before* loading the scene that uses them.
         Ogre::Root* root = mGraphicsSystem->getRoot();
@@ -467,7 +477,7 @@ namespace Demo
 
         // --- 2. Load Scene from JSON ---
         try {
-            loadSceneFromJson("scene.json"); // Assuming the file is in a location Ogre can find (e.g., bin/Data if added as resource path)
+            loadSceneFromJson(mSceneToLoad); // Assuming the file is passed as a command line argument, or is in a location Ogre can find (e.g., bin/Data if added as resource path)
         }
         catch (Ogre::Exception& e) {
             Ogre::LogManager::getSingleton().logMessage("Failed to load scene from JSON: " + e.getFullDescription(), Ogre::LML_CRITICAL);

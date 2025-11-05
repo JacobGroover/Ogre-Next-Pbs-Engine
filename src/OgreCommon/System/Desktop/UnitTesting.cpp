@@ -557,7 +557,7 @@ namespace Demo
         LogicSystem *logicSystem = 0;
 
         MainEntryPoints::createSystems( &graphicsGameState, &graphicsSystem, &logicGameState,
-                                        &logicSystem );
+                                        &logicSystem, 0, NULL );
 
         try
         {
