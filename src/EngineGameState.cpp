@@ -76,19 +76,32 @@ namespace Demo
         );
     }
 
-    Ogre::ColourValue parseColourValue(const rapidjson::Value& arr, bool includesAlpha = true) {
-        if (!arr.IsArray() || (includesAlpha && arr.Size() != 4) || (!includesAlpha && arr.Size() != 3)) {
-            // Log error or return default
-            Ogre::LogManager::getSingleton().logMessage(
-                "WARNING: Failed to parse ColourValue from JSON array.", Ogre::LML_CRITICAL);
-            return Ogre::ColourValue::White;
+    Ogre::ColourValue parseColourValue(const rapidjson::Value& val, bool includesAlpha = true) {
+        if (val.IsArray()) {
+            // Handle [r, g, b, a] (0.0 - 1.0)
+            if ((includesAlpha && val.Size() != 4) || (!includesAlpha && val.Size() != 3)) {
+                Ogre::LogManager::getSingleton().logMessage(
+                    "WARNING: Failed to parse ColourValue from JSON array.", Ogre::LML_CRITICAL);
+                return Ogre::ColourValue::White;
+            }
+            return Ogre::ColourValue(
+                static_cast<Ogre::Real>(val[0].GetDouble()),
+                static_cast<Ogre::Real>(val[1].GetDouble()),
+                static_cast<Ogre::Real>(val[2].GetDouble()),
+                includesAlpha ? static_cast<Ogre::Real>(val[3].GetDouble()) : 1.0f
+            );
         }
-        return Ogre::ColourValue(
-            static_cast<Ogre::Real>(arr[0].GetDouble()),
-            static_cast<Ogre::Real>(arr[1].GetDouble()),
-            static_cast<Ogre::Real>(arr[2].GetDouble()),
-            includesAlpha ? static_cast<Ogre::Real>(arr[3].GetDouble()) : 1.0f
-        );
+        else if (val.IsObject()) {
+            // Handle {"r": 255, "g": 0, "b": 0, "a": 255} (0 - 255)
+            float r = val.HasMember("r") ? static_cast<float>(val["r"].GetInt()) / 255.0f : 1.0f;
+            float g = val.HasMember("g") ? static_cast<float>(val["g"].GetInt()) / 255.0f : 1.0f;
+            float b = val.HasMember("b") ? static_cast<float>(val["b"].GetInt()) / 255.0f : 1.0f;
+            float a = (includesAlpha && val.HasMember("a")) ? static_cast<float>(val["a"].GetInt()) / 255.0f : 1.0f;
+            return Ogre::ColourValue(r, g, b, a);
+        }
+
+        Ogre::LogManager::getSingleton().logMessage("WARNING: ColourValue is neither Array nor Object.", Ogre::LML_CRITICAL);
+        return Ogre::ColourValue::White;
     }
 
     void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem)
@@ -182,7 +195,6 @@ namespace Demo
         }
         else
         {
-            // Fallback to Ogre Resource System
             Ogre::DataStreamPtr stream = Ogre::ResourceGroupManager::getSingleton().openResource(
                 filename, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, true);
             if (!stream)
@@ -197,16 +209,16 @@ namespace Demo
 
         if (document.HasParseError())
         {
-            Ogre::LogManager::getSingleton().logMessage("JSON Parse Error in " + filename + ": " +
-                rapidjson::GetParseError_En(document.GetParseError()), Ogre::LML_CRITICAL);
+            Ogre::LogManager::getSingleton().logMessage("JSON Parse Error: " +
+                std::string(rapidjson::GetParseError_En(document.GetParseError())), Ogre::LML_CRITICAL);
             return;
         }
 
         // --- 3. Process Resources (Materials) ---
-        // This creates the Ogre Datablocks so they are ready when we create the Primitives
+        // do this first so materials exist when primitives reference them
         processResourcesFromJson(document, mGraphicsSystem);
 
-        // --- 4. Process Nodes (Primitives, Lights, Cameras) ---
+        // --- 4. Process Nodes ---
         if (document.HasMember("nodes") && document["nodes"].IsArray())
         {
             const auto& nodes = document["nodes"];
@@ -221,7 +233,6 @@ namespace Demo
                 Ogre::String entityName = nodeData.HasMember("name") ? nodeData["name"].GetString() : ("Node_" + Ogre::StringConverter::toString(i));
 
                 // --- Extract Transform Data ---
-                // Editor saves X, Y, Z explicitly. We convert these to Ogre types.
                 Ogre::Vector3 pos = Ogre::Vector3::ZERO;
                 Ogre::Vector3 scale = Ogre::Vector3::UNIT_SCALE;
                 Ogre::Quaternion ori = Ogre::Quaternion::IDENTITY;
@@ -234,46 +245,43 @@ namespace Demo
                 if (nodeData.HasMember("scaleY")) scale.y = static_cast<Ogre::Real>(nodeData["scaleY"].GetDouble());
                 if (nodeData.HasMember("scaleZ")) scale.z = static_cast<Ogre::Real>(nodeData["scaleZ"].GetDouble());
 
-                // Rotation is likely Euler degrees in the editor
                 Ogre::Radian rotX(0), rotY(0), rotZ(0);
                 if (nodeData.HasMember("rotationX")) rotX = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationX"].GetDouble()));
                 if (nodeData.HasMember("rotationY")) rotY = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationY"].GetDouble()));
                 if (nodeData.HasMember("rotationZ")) rotZ = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationZ"].GetDouble()));
 
-                // Create Quaternion from Euler (Y-X-Z order is common, adjust if editor differs)
-                ori = Ogre::Quaternion(rotY, Ogre::Vector3::UNIT_Y) * Ogre::Quaternion(rotX, Ogre::Vector3::UNIT_X) *
-                    Ogre::Quaternion(rotZ, Ogre::Vector3::UNIT_Z);
+                ori = Ogre::Quaternion(rotY, Ogre::Vector3::UNIT_Y) * Ogre::Quaternion(rotX, Ogre::Vector3::UNIT_X) * Ogre::Quaternion(rotZ, Ogre::Vector3::UNIT_Z);
 
-                // Create EnTT Entity
+                // Create EnTT Entity and Transform
                 entt::entity entity = mRegistry.create();
                 mRegistry.emplace<TransformComponent>(entity, pos, ori, scale);
 
-                // --- Handle Specific Node Types ---
-
+                // --- Node Type Dispatch ---
                 if (nodeType == "PrimitiveNode")
                 {
                     std::string meshName = "Cube_d.mesh";
                     std::string materialName = "BaseWhite";
 
-                    // Mesh Type (0=Cube, 1=Sphere)
                     if (nodeData.HasMember("meshType") && nodeData["meshType"].IsInt()) {
                         int meshType = nodeData["meshType"].GetInt();
                         if (meshType == 0) meshName = "Cube_d.mesh";
                         else if (meshType == 1) meshName = "Sphere1000.mesh";
                     }
 
-                    // Material Assignment
+                    // Strip "res://" prefix so Ogre can find the datablock named "Material.8" from the editor JSON format
                     if (nodeData.HasMember("material") && nodeData["material"].IsString()) {
                         materialName = nodeData["material"].GetString();
+                        if (materialName.rfind("res://", 0) == 0) { // Starts with res://
+                            materialName = materialName.substr(6);
+                        }
                     }
 
-                    // Create Ogre Item
                     Ogre::Item* item = sceneManager->createItem(meshName, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, Ogre::SCENE_DYNAMIC);
                     item->setDatablockOrMaterialName(materialName);
                     Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
                     sceneNode->attachObject(item);
 
-                    // Set Initial Transform
+                    // Apply initial transform
                     sceneNode->setPosition(pos);
                     sceneNode->setOrientation(ori);
                     sceneNode->setScale(scale);
@@ -282,16 +290,12 @@ namespace Demo
                 }
                 else if (nodeType == "CameraNode")
                 {
-                    // Handle FOV
                     if (nodeData.HasMember("fov") && nodeData["fov"].IsDouble()) {
                         Ogre::Real fov = static_cast<Ogre::Real>(nodeData["fov"].GetDouble());
                         mGraphicsSystem->getCamera()->setFOVy(Ogre::Degree(fov));
                     }
-
-                    // Update Main Camera Transform
                     mGraphicsSystem->getCamera()->setPosition(pos);
                     mGraphicsSystem->getCamera()->setOrientation(ori);
-                    // Note: Cameras usually ignore scale
                 }
                 else if (nodeType == "LightNode")
                 {
@@ -299,14 +303,11 @@ namespace Demo
                     Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode();
                     lightNode->attachObject(light);
                     lightNode->setPosition(pos);
-                    // Note: Directional lights use the orientation to determine direction
 
-                    // Light Type
                     if (nodeData.HasMember("lightType") && nodeData["lightType"].IsInt()) {
                         int typeVal = nodeData["lightType"].GetInt();
                         if (typeVal == 1) {
                             light->setType(Ogre::Light::LT_DIRECTIONAL);
-                            // Direction is -Z, rotated by node orientation
                             light->setDirection((ori * Ogre::Vector3::NEGATIVE_UNIT_Z).normalisedCopy());
                         }
                         else {
@@ -314,19 +315,15 @@ namespace Demo
                         }
                     }
 
-                    // Color
-                    if (nodeData.HasMember("color") && nodeData["color"].IsArray()) {
-                        light->setDiffuseColour(parseColourValue(nodeData["color"], true));
-                        light->setSpecularColour(parseColourValue(nodeData["color"], true));
+                    if (nodeData.HasMember("color")) {
+                        Ogre::ColourValue col = parseColourValue(nodeData["color"], true);
+                        light->setDiffuseColour(col);
+                        light->setSpecularColour(col);
                     }
 
-                    // Intensity
                     if (nodeData.HasMember("intensity") && nodeData["intensity"].IsDouble()) {
                         light->setPowerScale(static_cast<Ogre::Real>(nodeData["intensity"].GetDouble()));
                     }
-
-                    // We don't attach an OgreRenderableComponent because Lights aren't "rendered" meshes, 
-                    // but you could add a specific LightComponent here if needed for logic.
                 }
             }
         }
