@@ -15,8 +15,14 @@
 // Include the central components header for EnTT components
 #include "Components/Components.h"
 
+#include "rapidjson/document.h"
+
 namespace Demo
 {
+
+    // Forward declaration for the resource processing helper
+    class GraphicsSystem; // Already declared in GraphicsSystem.h which is included by TutorialGameState.h
+    void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem);
 
     // --- Game State Class ---
     class EngineGameState : public TutorialGameState

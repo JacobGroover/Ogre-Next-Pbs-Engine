@@ -34,8 +34,11 @@
 // #include "rapidjson/error/en.h"
 // And potentially adjust include paths in CMakeLists.txt if not already accessible.
 // Ogre uses RapidJSON internally, check OgreCommon/System/Desktop/UnitTesting.cpp for include examples.
-#include "rapidjson/document.h"
+//#include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
+
+// Forward declaration for cleaner code
+void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem);
 
 using namespace Demo;
 
@@ -87,6 +90,68 @@ namespace Demo
             includesAlpha ? static_cast<Ogre::Real>(arr[3].GetDouble()) : 1.0f
         );
     }
+
+    void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem)
+    {
+        if (!document.HasMember("resources") || !document["resources"].IsArray()) {
+            return;
+        }
+
+        const auto& resources = document["resources"];
+        Ogre::Root* root = graphicsSystem->getRoot();
+        Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
+        Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(hlmsManager->getHlms(Ogre::HLMS_PBS));
+
+        Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(resources.Size()) + " resources from JSON.", Ogre::LML_TRIVIAL);
+
+        for (rapidjson::SizeType i = 0; i < resources.Size(); ++i)
+        {
+            const auto& resData = resources[i];
+            if (!resData.IsObject() || !resData.HasMember("type") || !resData["type"].IsString()) continue;
+
+            std::string resType = resData["type"].GetString();
+            std::string resName = resData.HasMember("name") ? resData["name"].GetString() : ("Resource_" + Ogre::StringConverter::toString(i));
+
+            if (resType == "MaterialResource")
+            {
+                Ogre::HlmsPbsDatablock* pbsDatablock = nullptr;
+                Ogre::HlmsDatablock* existing = hlmsPbs->getDatablock(resName);
+                if (existing) {
+                    pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(existing);
+                }
+                else {
+                    pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
+                        hlmsPbs->createDatablock(resName, resName, Ogre::HlmsMacroblock(),
+                            Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
+                }
+
+                // Set default workflow properties
+                pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+                pbsDatablock->setMetalness(0.0f);
+                pbsDatablock->setRoughness(0.5f);
+
+                // Handle Albedo Color (converted from editor's wxColour [R,G,B,A])
+                if (resData.HasMember("albedo") && resData["albedo"].IsArray()) {
+                    Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
+
+                    // --- FIX APPLIED HERE ---
+                    // Manually construct Ogre::Vector3 from the ColourValue's R, G, B components.
+                    pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
+                    // --------------------------
+                }
+
+                // Handle other material properties if present
+                if (resData.HasMember("roughness") && resData["roughness"].IsDouble()) {
+                    pbsDatablock->setRoughness(static_cast<float>(resData["roughness"].GetDouble()));
+                }
+                if (resData.HasMember("metallic") && resData["metallic"].IsDouble()) {
+                    pbsDatablock->setMetalness(static_cast<float>(resData["metallic"].GetDouble()));
+                }
+
+                Ogre::LogManager::getSingleton().logMessage("Configured Material: " + resName, Ogre::LML_TRIVIAL);
+            }
+        }
+    }
     // --- End Helper Functions ---
 
     EngineGameState::EngineGameState(const Ogre::String& helpDescription,
@@ -102,16 +167,13 @@ namespace Demo
     {
         Ogre::LogManager::getSingleton().logMessage("Loading scene from JSON: " + filename, Ogre::LML_TRIVIAL);
         Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
-        Ogre::Root* root = mGraphicsSystem->getRoot();
 
-        // --- Load JSON File using Ogre Resource System ---
-        // 1. Attempt to load as an absolute/relative path from the filesystem
+        // --- 1. Load JSON File ---
         std::string jsonData;
         std::ifstream inFile(filename.c_str(), std::ios::binary | std::ios::in);
 
         if (inFile.is_open())
         {
-            Ogre::LogManager::getSingleton().logMessage("Loading scene from direct file path.");
             inFile.seekg(0, std::ios::end);
             jsonData.resize(static_cast<size_t>(inFile.tellg()));
             inFile.seekg(0, std::ios::beg);
@@ -120,287 +182,156 @@ namespace Demo
         }
         else
         {
-            // 2. If direct open failed, try Ogre's resource system
-            Ogre::LogManager::getSingleton().logMessage("Direct file path failed. Trying Ogre resource system for: " + filename);
-            Ogre::DataStreamPtr stream;
-            try {
-                stream = Ogre::ResourceGroupManager::getSingleton().openResource(
-                    filename, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, true);
-
-                if (!stream)
-                {
-                    throw Ogre::FileNotFoundException(0, "Could not open scene file via ResourceGroupManager: " + filename, __FUNCTION__, __FILE__, __LINE__);
-                }
-
-                jsonData = stream->getAsString();
-                stream->close();
-            }
-            catch (Ogre::Exception& e) {
-                Ogre::LogManager::getSingleton().logMessage("Could not open/find scene file '" + filename + "' using direct path or resource system. Error: " + e.getFullDescription(), Ogre::LML_CRITICAL);
-                throw; // Rethrow the exception
-            }
+            // Fallback to Ogre Resource System
+            Ogre::DataStreamPtr stream = Ogre::ResourceGroupManager::getSingleton().openResource(
+                filename, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, true);
+            if (!stream)
+                OGRE_EXCEPT(Ogre::Exception::ERR_FILE_NOT_FOUND, "Could not open scene file: " + filename, "EngineGameState::loadSceneFromJson");
+            jsonData = stream->getAsString();
+            stream->close();
         }
 
-        // --- Parse JSON ---
+        // --- 2. Parse JSON ---
         rapidjson::Document document;
         document.Parse(jsonData.c_str());
 
         if (document.HasParseError())
         {
-            Ogre::LogManager::getSingleton().logMessage(
-                "JSON parse error in " + filename + " at offset " +
-                Ogre::StringConverter::toString(document.GetErrorOffset()) + ": " +
+            Ogre::LogManager::getSingleton().logMessage("JSON Parse Error in " + filename + ": " +
                 rapidjson::GetParseError_En(document.GetParseError()), Ogre::LML_CRITICAL);
-            // Optionally throw or handle error appropriately
-            throw Ogre::Exception(Ogre::Exception::ERR_INVALIDPARAMS, "JSON parse error in " + filename, __FUNCTION__);
-            // return;
+            return;
         }
-        // ____________________________________
 
-        // --- Process Scene Settings ---
-        if (document.HasMember("scene_settings") && document["scene_settings"].IsObject())
+        // --- 3. Process Resources (Materials) ---
+        // This creates the Ogre Datablocks so they are ready when we create the Primitives
+        processResourcesFromJson(document, mGraphicsSystem);
+
+        // --- 4. Process Nodes (Primitives, Lights, Cameras) ---
+        if (document.HasMember("nodes") && document["nodes"].IsArray())
         {
-            const auto& settings = document["scene_settings"];
+            const auto& nodes = document["nodes"];
+            Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(nodes.Size()) + " nodes.", Ogre::LML_TRIVIAL);
 
-            // Ambient Light
-            if (settings.HasMember("ambient_light") && settings["ambient_light"].IsObject())
+            for (rapidjson::SizeType i = 0; i < nodes.Size(); ++i)
             {
-                const auto& ambient = settings["ambient_light"];
-                Ogre::ColourValue upperHemi = Ogre::ColourValue(0.3f, 0.5f, 0.7f) * 0.1f * 0.75f;
-                Ogre::ColourValue lowerHemi = Ogre::ColourValue(0.6f, 0.45f, 0.3f) * 0.065f * 0.75f;
-                Ogre::Vector3 hemisphereDir = Ogre::Vector3::UNIT_Y;
+                const auto& nodeData = nodes[i];
+                if (!nodeData.IsObject() || !nodeData.HasMember("type") || !nodeData["type"].IsString()) continue;
 
-                if (ambient.HasMember("upper_hemisphere")) upperHemi = parseColourValue(ambient["upper_hemisphere"]);
-                if (ambient.HasMember("lower_hemisphere")) lowerHemi = parseColourValue(ambient["lower_hemisphere"]);
-                if (ambient.HasMember("hemisphere_direction")) hemisphereDir = parseVector3(ambient["hemisphere_direction"]);
+                Ogre::String nodeType = nodeData["type"].GetString();
+                Ogre::String entityName = nodeData.HasMember("name") ? nodeData["name"].GetString() : ("Node_" + Ogre::StringConverter::toString(i));
 
-                sceneManager->setAmbientLight(upperHemi, lowerHemi, hemisphereDir);
-                Ogre::LogManager::getSingleton().logMessage("Applied ambient light settings from JSON.", Ogre::LML_TRIVIAL);
-            }
-
-            // Camera (Initial Setup)
-            if (settings.HasMember("camera") && settings["camera"].IsObject())
-            {
-                const auto& camSettings = settings["camera"];
-                Ogre::Vector3 camPos = Ogre::Vector3(0, 6, 10);
-                Ogre::Vector3 camLookAt = Ogre::Vector3::ZERO;
-
-                if (camSettings.HasMember("position")) camPos = parseVector3(camSettings["position"]);
-                if (camSettings.HasMember("look_at")) camLookAt = parseVector3(camSettings["look_at"]);
-
-                mGraphicsSystem->getCamera()->setPosition(camPos);
-                mGraphicsSystem->getCamera()->lookAt(camLookAt);
-                Ogre::LogManager::getSingleton().logMessage("Applied camera settings from JSON.", Ogre::LML_TRIVIAL);
-            }
-        }
-        else {
-            Ogre::LogManager::getSingleton().logMessage("No 'scene_settings' found in JSON. Using defaults.", Ogre::LML_NORMAL);
-            // Apply default ambient light if not in JSON
-            sceneManager->setAmbientLight(Ogre::ColourValue(0.3f, 0.5f, 0.7f) * 0.1f * 0.75f,
-                Ogre::ColourValue(0.6f, 0.45f, 0.3f) * 0.065f * 0.75f,
-                Ogre::Vector3::UNIT_Y);
-        }
-
-        // --- Process Lights ---
-        if (document.HasMember("lights") && document["lights"].IsArray())
-        {
-            const auto& lights = document["lights"];
-            Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(lights.Size()) + " lights from JSON.", Ogre::LML_TRIVIAL);
-            for (rapidjson::SizeType i = 0; i < lights.Size(); ++i)
-            {
-                const auto& lightData = lights[i];
-                if (!lightData.IsObject()) continue;
-
-                Ogre::Light* light = sceneManager->createLight();
-                Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode(); // Could attach later based on component
-                lightNode->attachObject(light);
-
-                if (lightData.HasMember("type") && lightData["type"].IsString())
-                {
-                    std::string type = lightData["type"].GetString();
-                    if (type == "directional")
-                    {
-                        light->setType(Ogre::Light::LT_DIRECTIONAL);
-                        if (lightData.HasMember("direction"))
-                        {
-                            light->setDirection(parseVector3(lightData["direction"]).normalisedCopy());
-                        }
-                        else {
-                            light->setDirection(Ogre::Vector3::NEGATIVE_UNIT_Z); // Default direction
-                        }
-                    }
-                    else if (type == "point")
-                    {
-                        light->setType(Ogre::Light::LT_POINT);
-                        if (lightData.HasMember("position"))
-                        {
-                            lightNode->setPosition(parseVector3(lightData["position"]));
-                        }
-                        // Add attenuation properties if needed
-                    }
-                    else if (type == "spot")
-                    {
-                        light->setType(Ogre::Light::LT_SPOTLIGHT);
-                        if (lightData.HasMember("position"))
-                        {
-                            lightNode->setPosition(parseVector3(lightData["position"]));
-                        }
-                        if (lightData.HasMember("direction"))
-                        {
-                            light->setDirection(parseVector3(lightData["direction"]).normalisedCopy());
-                        }
-                        else {
-                            light->setDirection(Ogre::Vector3::NEGATIVE_UNIT_Z); // Default direction
-                        }
-                        // Add inner/outer angle, falloff etc. if needed
-                    }
-                }
-
-                if (lightData.HasMember("power_scale") && lightData["power_scale"].IsNumber())
-                {
-                    light->setPowerScale(static_cast<Ogre::Real>(lightData["power_scale"].GetDouble()));
-                }
-                else {
-                    light->setPowerScale(1.0f); // Default power
-                }
-
-                if (lightData.HasMember("diffuse_colour"))
-                {
-                    light->setDiffuseColour(parseColourValue(lightData["diffuse_colour"], false));
-                }
-                if (lightData.HasMember("specular_colour"))
-                {
-                    light->setSpecularColour(parseColourValue(lightData["specular_colour"], false));
-                }
-            }
-        }
-        else {
-            Ogre::LogManager::getSingleton().logMessage("No 'lights' array found in JSON. Creating default directional light.", Ogre::LML_NORMAL);
-            // Create default light if none specified
-            Ogre::Light* light = sceneManager->createLight();
-            Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode();
-            lightNode->attachObject(light);
-            light->setPowerScale(1.0f);
-            light->setType(Ogre::Light::LT_DIRECTIONAL);
-            light->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
-        }
-
-        // --- Process Entities ---
-        if (document.HasMember("entities") && document["entities"].IsArray())
-        {
-            const auto& entities = document["entities"];
-            Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(entities.Size()) + " entities from JSON.", Ogre::LML_TRIVIAL);
-
-            for (rapidjson::SizeType i = 0; i < entities.Size(); ++i)
-            {
-                const auto& entityData = entities[i];
-                if (!entityData.IsObject() || !entityData.HasMember("components") || !entityData["components"].IsObject())
-                {
-                    Ogre::LogManager::getSingleton().logMessage("Skipping invalid entity definition #" + Ogre::StringConverter::toString(i), Ogre::LML_NORMAL);
-                    continue;
-                }
-
-                entt::entity entity = mRegistry.create();
-                const auto& components = entityData["components"];
-                Ogre::String entityName = entityData.HasMember("name") ? entityData["name"].GetString() : ("Entity_" + Ogre::StringConverter::toString(static_cast<uint32_t>(entity)));
-
-                // -- Transform Component --
+                // --- Extract Transform Data ---
+                // Editor saves X, Y, Z explicitly. We convert these to Ogre types.
                 Ogre::Vector3 pos = Ogre::Vector3::ZERO;
-                Ogre::Quaternion ori = Ogre::Quaternion::IDENTITY;
                 Ogre::Vector3 scale = Ogre::Vector3::UNIT_SCALE;
-                if (components.HasMember("TransformComponent") && components["TransformComponent"].IsObject())
-                {
-                    const auto& transformData = components["TransformComponent"];
-                    if (transformData.HasMember("position")) pos = parseVector3(transformData["position"]);
-                    if (transformData.HasMember("orientation")) ori = parseQuaternion(transformData["orientation"]);
-                    if (transformData.HasMember("scale")) scale = parseVector3(transformData["scale"]);
-                }
-                else {
-                    Ogre::LogManager::getSingleton().logMessage("Entity " + entityName + " missing TransformComponent. Using default.");
-                }
+                Ogre::Quaternion ori = Ogre::Quaternion::IDENTITY;
+
+                if (nodeData.HasMember("positionX")) pos.x = static_cast<Ogre::Real>(nodeData["positionX"].GetDouble());
+                if (nodeData.HasMember("positionY")) pos.y = static_cast<Ogre::Real>(nodeData["positionY"].GetDouble());
+                if (nodeData.HasMember("positionZ")) pos.z = static_cast<Ogre::Real>(nodeData["positionZ"].GetDouble());
+
+                if (nodeData.HasMember("scaleX")) scale.x = static_cast<Ogre::Real>(nodeData["scaleX"].GetDouble());
+                if (nodeData.HasMember("scaleY")) scale.y = static_cast<Ogre::Real>(nodeData["scaleY"].GetDouble());
+                if (nodeData.HasMember("scaleZ")) scale.z = static_cast<Ogre::Real>(nodeData["scaleZ"].GetDouble());
+
+                // Rotation is likely Euler degrees in the editor
+                Ogre::Radian rotX(0), rotY(0), rotZ(0);
+                if (nodeData.HasMember("rotationX")) rotX = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationX"].GetDouble()));
+                if (nodeData.HasMember("rotationY")) rotY = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationY"].GetDouble()));
+                if (nodeData.HasMember("rotationZ")) rotZ = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationZ"].GetDouble()));
+
+                // Create Quaternion from Euler (Y-X-Z order is common, adjust if editor differs)
+                ori = Ogre::Quaternion(rotY, Ogre::Vector3::UNIT_Y) * Ogre::Quaternion(rotX, Ogre::Vector3::UNIT_X) *
+                    Ogre::Quaternion(rotZ, Ogre::Vector3::UNIT_Z);
+
+                // Create EnTT Entity
+                entt::entity entity = mRegistry.create();
                 mRegistry.emplace<TransformComponent>(entity, pos, ori, scale);
 
-                // -- OgreRenderable Component --
-                Ogre::Item* item = nullptr;
-                Ogre::SceneNode* sceneNode = nullptr;
-                if (components.HasMember("OgreRenderableComponent") && components["OgreRenderableComponent"].IsObject())
+                // --- Handle Specific Node Types ---
+
+                if (nodeType == "PrimitiveNode")
                 {
-                    const auto& renderableData = components["OgreRenderableComponent"];
-                    std::string meshName = "Cube_d.mesh"; // Default mesh
-                    std::string materialName = "BaseWhite"; // Default material
-                    Ogre::String resourceGroup = Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME; // Default resource group
+                    std::string meshName = "Cube_d.mesh";
+                    std::string materialName = "BaseWhite";
 
-                    if (renderableData.HasMember("mesh") && renderableData["mesh"].IsString())
-                    {
-                        meshName = renderableData["mesh"].GetString();
-                    }
-                    else {
-                        Ogre::LogManager::getSingleton().logMessage("Entity " + entityName + " OgreRenderableComponent missing 'mesh'. Using default.", Ogre::LML_NORMAL);
-                    }
-                    if (renderableData.HasMember("material") && renderableData["material"].IsString())
-                    {
-                        materialName = renderableData["material"].GetString();
-                    }
-                    else {
-                        Ogre::LogManager::getSingleton().logMessage("Entity " + entityName + " OgreRenderableComponent missing 'material'. Using default.", Ogre::LML_NORMAL);
-                    }
-                    if (renderableData.HasMember("resource_group") && renderableData["resource_group"].IsString())
-                    {
-                        resourceGroup = renderableData["resource_group"].GetString();
+                    // Mesh Type (0=Cube, 1=Sphere)
+                    if (nodeData.HasMember("meshType") && nodeData["meshType"].IsInt()) {
+                        int meshType = nodeData["meshType"].GetInt();
+                        if (meshType == 0) meshName = "Cube_d.mesh";
+                        else if (meshType == 1) meshName = "Sphere1000.mesh";
                     }
 
-
-                    try {
-                        item = sceneManager->createItem(meshName, resourceGroup, Ogre::SCENE_DYNAMIC);
-                        item->setDatablockOrMaterialName(materialName); // Use setDatablockOrMaterialName for flexibility
-
-                        sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)
-                            ->createChildSceneNode(Ogre::SCENE_DYNAMIC);
-                        sceneNode->attachObject(item);
-
-                        // Initial placement using TransformComponent data
-                        sceneNode->setPosition(pos);
-                        sceneNode->setOrientation(ori);
-                        sceneNode->setScale(scale);
-
-                        mRegistry.emplace<OgreRenderableComponent>(entity, item, sceneNode);
-                        Ogre::LogManager::getSingleton().logMessage("Created Ogre renderable for " + entityName + " (Mesh: " + meshName + ", Material: " + materialName + ")", Ogre::LML_TRIVIAL);
+                    // Material Assignment
+                    if (nodeData.HasMember("material") && nodeData["material"].IsString()) {
+                        materialName = nodeData["material"].GetString();
                     }
-                    catch (Ogre::Exception& e) {
-                        Ogre::LogManager::getSingleton().logMessage("Failed to create Ogre renderable for entity " + entityName + ": " + e.getFullDescription(), Ogre::LML_CRITICAL);
-                        // Clean up potentially partially created Ogre objects if needed
-                        if (item && sceneNode) sceneNode->detachObject(item);
-                        if (item) sceneManager->destroyItem(item);
-                        if (sceneNode) sceneManager->destroySceneNode(sceneNode);
-                        mRegistry.destroy(entity); // Destroy the EnTT entity if Ogre setup failed
-                        continue; // Skip other components for this entity
-                    }
+
+                    // Create Ogre Item
+                    Ogre::Item* item = sceneManager->createItem(meshName, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, Ogre::SCENE_DYNAMIC);
+                    item->setDatablockOrMaterialName(materialName);
+                    Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
+                    sceneNode->attachObject(item);
+
+                    // Set Initial Transform
+                    sceneNode->setPosition(pos);
+                    sceneNode->setOrientation(ori);
+                    sceneNode->setScale(scale);
+
+                    mRegistry.emplace<OgreRenderableComponent>(entity, item, sceneNode);
                 }
-                else {
-                    Ogre::LogManager::getSingleton().logMessage("Entity " + entityName + " missing OgreRenderableComponent. Entity will not be visible.", Ogre::LML_CRITICAL);
-                }
-
-                // -- Spin Component --
-                if (components.HasMember("SpinComponent") && components["SpinComponent"].IsObject())
+                else if (nodeType == "CameraNode")
                 {
-                    const auto& spinData = components["SpinComponent"];
-                    float speed = 0.0f;
-                    if (spinData.HasMember("speed") && spinData["speed"].IsNumber())
-                    {
-                        speed = static_cast<float>(spinData["speed"].GetDouble());
+                    // Handle FOV
+                    if (nodeData.HasMember("fov") && nodeData["fov"].IsDouble()) {
+                        Ogre::Real fov = static_cast<Ogre::Real>(nodeData["fov"].GetDouble());
+                        mGraphicsSystem->getCamera()->setFOVy(Ogre::Degree(fov));
                     }
-                    mRegistry.emplace<SpinComponent>(entity, speed);
+
+                    // Update Main Camera Transform
+                    mGraphicsSystem->getCamera()->setPosition(pos);
+                    mGraphicsSystem->getCamera()->setOrientation(ori);
+                    // Note: Cameras usually ignore scale
                 }
+                else if (nodeType == "LightNode")
+                {
+                    Ogre::Light* light = sceneManager->createLight();
+                    Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode();
+                    lightNode->attachObject(light);
+                    lightNode->setPosition(pos);
+                    // Note: Directional lights use the orientation to determine direction
 
-                // --- Add processing for other components here ---
+                    // Light Type
+                    if (nodeData.HasMember("lightType") && nodeData["lightType"].IsInt()) {
+                        int typeVal = nodeData["lightType"].GetInt();
+                        if (typeVal == 1) {
+                            light->setType(Ogre::Light::LT_DIRECTIONAL);
+                            // Direction is -Z, rotated by node orientation
+                            light->setDirection((ori * Ogre::Vector3::NEGATIVE_UNIT_Z).normalisedCopy());
+                        }
+                        else {
+                            light->setType(Ogre::Light::LT_POINT);
+                        }
+                    }
 
-                Ogre::LogManager::getSingleton().logMessage("Successfully processed entity: " + entityName, Ogre::LML_TRIVIAL);
+                    // Color
+                    if (nodeData.HasMember("color") && nodeData["color"].IsArray()) {
+                        light->setDiffuseColour(parseColourValue(nodeData["color"], true));
+                        light->setSpecularColour(parseColourValue(nodeData["color"], true));
+                    }
+
+                    // Intensity
+                    if (nodeData.HasMember("intensity") && nodeData["intensity"].IsDouble()) {
+                        light->setPowerScale(static_cast<Ogre::Real>(nodeData["intensity"].GetDouble()));
+                    }
+
+                    // We don't attach an OgreRenderableComponent because Lights aren't "rendered" meshes, 
+                    // but you could add a specific LightComponent here if needed for logic.
+                }
             }
         }
-        else {
-            Ogre::LogManager::getSingleton().logMessage("No 'entities' array found in JSON.", Ogre::LML_NORMAL);
-        }
-        Ogre::LogManager::getSingleton().logMessage("Finished loading scene from JSON.", Ogre::LML_TRIVIAL);
+
+        Ogre::LogManager::getSingleton().logMessage("Finished loading scene.", Ogre::LML_TRIVIAL);
     }
     //-----------------------------------------------------------------------------------
     void EngineGameState::parseCommandLineArgs(int argc, const char* argv[])
