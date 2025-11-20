@@ -143,17 +143,17 @@ namespace Demo
                 pbsDatablock->setMetalness(0.0f);
                 pbsDatablock->setRoughness(0.5f);
 
-                // Handle Albedo Color (converted from editor's wxColour [R,G,B,A])
-                if (resData.HasMember("albedo") && resData["albedo"].IsArray()) {
+                if (resData.HasMember("albedo") && resData["albedo"].IsObject()) {
                     Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
 
-                    // --- FIX APPLIED HERE ---
-                    // Manually construct Ogre::Vector3 from the ColourValue's R, G, B components.
+                    // FIX 1: Set Diffuse (Albedo) component
                     pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
-                    // --------------------------
+
+                    // FIX 2: Set Specular component to the same color to ensure vibrant rendering in the low-light/simple PBS setup.
+                    pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                 }
 
-                // Handle other material properties if present
+                // Handle other material properties
                 if (resData.HasMember("roughness") && resData["roughness"].IsDouble()) {
                     pbsDatablock->setRoughness(static_cast<float>(resData["roughness"].GetDouble()));
                 }
@@ -321,8 +321,13 @@ namespace Demo
                         light->setSpecularColour(col);
                     }
 
+                    // FIX: Use intensity for power scale and apply a brightness boost (e.g., 5.0)
                     if (nodeData.HasMember("intensity") && nodeData["intensity"].IsDouble()) {
-                        light->setPowerScale(static_cast<Ogre::Real>(nodeData["intensity"].GetDouble()));
+                        Ogre::Real intensity = static_cast<Ogre::Real>(nodeData["intensity"].GetDouble());
+                        light->setPowerScale(intensity * 5.0f); // Apply intensity + 5x boost for scene lighting
+                    }
+                    else {
+                        light->setPowerScale(1.0f * 5.0f); // Default power with boost
                     }
                 }
             }
