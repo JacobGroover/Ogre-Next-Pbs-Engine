@@ -86,6 +86,14 @@ endif()
 
 add_executable( ${PROJECT_NAME} WIN32 MACOSX_BUNDLE ${SOURCES} ${HEADERS} ${RESOURCES} )
 
+if( MSVC )
+    # This sets the "Working Directory" in Visual Studio -> Properties -> Debugging
+    # to the folder where the executable, plugins.cfg, and DLLs are located.
+    set_target_properties( ${PROJECT_NAME} PROPERTIES 
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/$(Configuration)"
+    )
+endif()
+
 target_include_directories( ${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/Dependencies/Ogre/ogre-next/Dependencies/include
