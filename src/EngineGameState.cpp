@@ -104,6 +104,7 @@ namespace Demo
         return Ogre::ColourValue::White;
     }
 
+    // Helper to process resources (Materials and Textures) from the JSON
     void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem)
     {
         if (!document.HasMember("resources") || !document["resources"].IsArray()) {
@@ -115,8 +116,30 @@ namespace Demo
         Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
         Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(hlmsManager->getHlms(Ogre::HLMS_PBS));
 
-        Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(resources.Size()) + " resources from JSON.", Ogre::LML_TRIVIAL);
+        // --- Pass 1: Map TextureResource Names to File Paths ---
+        // Editor definition: "Texture.9" -> "wood.jpg"
+        std::map<std::string, std::string> textureNameToFileMap;
 
+        for (rapidjson::SizeType i = 0; i < resources.Size(); ++i)
+        {
+            const auto& resData = resources[i];
+            if (!resData.IsObject() || !resData.HasMember("type") || !resData["type"].IsString()) continue;
+
+            std::string resType = resData["type"].GetString();
+            std::string resName = resData.HasMember("name") ? resData["name"].GetString() : ("Resource_" + Ogre::StringConverter::toString(i));
+
+            if (resType == "TextureResource")
+            {
+                if (resData.HasMember("path") && resData["path"].IsString()) {
+                    textureNameToFileMap[resName] = resData["path"].GetString();
+                }
+            }
+        }
+
+        // Use LML_NORMAL so this appears in the log
+        Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(resources.Size()) + " resources.", Ogre::LML_NORMAL);
+
+        // --- Pass 2: Create Materials using the Map ---
         for (rapidjson::SizeType i = 0; i < resources.Size(); ++i)
         {
             const auto& resData = resources[i];
@@ -138,30 +161,63 @@ namespace Demo
                             Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
                 }
 
-                // Set default workflow properties
+                // --- Workflow Settings ---
                 pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
-                pbsDatablock->setMetalness(0.0f);
-                pbsDatablock->setRoughness(0.5f);
 
+                // --- Base Properties ---
+                if (resData.HasMember("roughness") && resData["roughness"].IsNumber()) {
+                    pbsDatablock->setRoughness(static_cast<float>(resData["roughness"].GetDouble()));
+                }
+                else {
+                    pbsDatablock->setRoughness(0.5f);
+                }
+
+                if (resData.HasMember("metallic") && resData["metallic"].IsNumber()) {
+                    pbsDatablock->setMetalness(static_cast<float>(resData["metallic"].GetDouble()));
+                }
+                else {
+                    pbsDatablock->setMetalness(0.0f);
+                }
+
+                // --- Colors (Albedo) ---
                 if (resData.HasMember("albedo") && resData["albedo"].IsObject()) {
                     Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
-
-                    // FIX 1: Set Diffuse (Albedo) component
                     pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
-
-                    // FIX 2: Set Specular component to the same color to ensure vibrant rendering in the low-light/simple PBS setup.
+                    // Fix for dark rendering: set Specular to match Diffuse
                     pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                 }
 
-                // Handle other material properties
-                if (resData.HasMember("roughness") && resData["roughness"].IsDouble()) {
-                    pbsDatablock->setRoughness(static_cast<float>(resData["roughness"].GetDouble()));
+                // --- Texture Maps ---
+                // Helper lambda: Strips "res://" and looks up the actual filename
+                auto resolveTextureFile = [&](const rapidjson::Value& val) -> std::string {
+                    std::string refName = val.GetString();
+                    if (refName.rfind("res://", 0) == 0) refName = refName.substr(6);
+
+                    // Look up the actual file path
+                    if (textureNameToFileMap.find(refName) != textureNameToFileMap.end()) {
+                        return textureNameToFileMap[refName];
+                    }
+                    return refName; // Fallback
+                    };
+
+                if (resData.HasMember("albedoTexture") && resData["albedoTexture"].IsString() && resData["albedoTexture"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["albedoTexture"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
                 }
-                if (resData.HasMember("metallic") && resData["metallic"].IsDouble()) {
-                    pbsDatablock->setMetalness(static_cast<float>(resData["metallic"].GetDouble()));
+                if (resData.HasMember("normalMap") && resData["normalMap"].IsString() && resData["normalMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["normalMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_NORMAL, filename);
+                }
+                if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["metallicMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
+                }
+                if (resData.HasMember("roughnessMap") && resData["roughnessMap"].IsString() && resData["roughnessMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["roughnessMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, filename);
                 }
 
-                Ogre::LogManager::getSingleton().logMessage("Configured Material: " + resName, Ogre::LML_TRIVIAL);
+                Ogre::LogManager::getSingleton().logMessage("Configured Material: " + resName, Ogre::LML_NORMAL);
             }
         }
     }
@@ -214,8 +270,29 @@ namespace Demo
             return;
         }
 
+        // --- 2.5. Register Project Path as Resource Location ---
+        // This ensures textures referenced in the JSON can be found by Ogre
+        if (document.HasMember("path") && document["path"].IsString()) {
+            std::string projectPath = document["path"].GetString();
+            if (!projectPath.empty()) {
+                Ogre::ResourceGroupManager& rgm = Ogre::ResourceGroupManager::getSingleton();
+                Ogre::String groupName = Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME;
+
+                // Add the location
+                rgm.addResourceLocation(projectPath, "FileSystem", groupName);
+                Ogre::LogManager::getSingleton().logMessage("Registered project resource path: " + projectPath);
+
+                // FIX: Check if initialized to avoid runtime crash, and provide the missing boolean argument
+                if (!rgm.isResourceGroupInitialised(groupName)) {
+                    rgm.initialiseResourceGroup(groupName, true);
+                }
+                // Note: If the group is already initialized, addResourceLocation still allows 
+                // textures to be found immediately, so no else/re-init is required for textures.
+            }
+        }
+
         // --- 3. Process Resources (Materials) ---
-        // do this first so materials exist when primitives reference them
+        // Must be done before processing nodes so materials are available
         processResourcesFromJson(document, mGraphicsSystem);
 
         // --- 4. Process Nodes ---
@@ -230,9 +307,29 @@ namespace Demo
                 if (!nodeData.IsObject() || !nodeData.HasMember("type") || !nodeData["type"].IsString()) continue;
 
                 Ogre::String nodeType = nodeData["type"].GetString();
-                Ogre::String entityName = nodeData.HasMember("name") ? nodeData["name"].GetString() : ("Node_" + Ogre::StringConverter::toString(i));
 
-                // --- Extract Transform Data ---
+                // --- 4a. Handle SceneNode (Global Settings) ---
+                if (nodeType == "SceneNode")
+                {
+                    // SceneNode contains ambientLight (default 0.5)
+                    if (nodeData.HasMember("ambientLight") && nodeData["ambientLight"].IsNumber())
+                    {
+                        float ambientScale = static_cast<float>(nodeData["ambientLight"].GetDouble());
+
+                        // Apply this scale to the existing ambient light settings
+                        // Note: We use the upper hemisphere as a baseline reference
+                        Ogre::ColourValue upperHemi = sceneManager->getAmbientLightUpperHemisphere();
+                        Ogre::ColourValue lowerHemi = sceneManager->getAmbientLightLowerHemisphere();
+                        Ogre::Vector3 dir = sceneManager->getAmbientLightHemisphereDir();
+
+                        // Assuming current values are "base" values, we scale them by the factor from JSON
+                        // Multiplying by 2.0 because 0.5 is default in editor, resulting in 1.0 multiplier
+                        sceneManager->setAmbientLight(upperHemi * ambientScale * 2.0f, lowerHemi * ambientScale * 2.0f, dir);
+                    }
+                    continue; // SceneNode is not an entity with a transform, so we skip the rest
+                }
+
+                // --- 4b. Extract Transform Data (Node3D interface) ---
                 Ogre::Vector3 pos = Ogre::Vector3::ZERO;
                 Ogre::Vector3 scale = Ogre::Vector3::UNIT_SCALE;
                 Ogre::Quaternion ori = Ogre::Quaternion::IDENTITY;
@@ -250,13 +347,14 @@ namespace Demo
                 if (nodeData.HasMember("rotationY")) rotY = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationY"].GetDouble()));
                 if (nodeData.HasMember("rotationZ")) rotZ = Ogre::Degree(static_cast<Ogre::Real>(nodeData["rotationZ"].GetDouble()));
 
+                // Z-X-Y Euler order
                 ori = Ogre::Quaternion(rotY, Ogre::Vector3::UNIT_Y) * Ogre::Quaternion(rotX, Ogre::Vector3::UNIT_X) * Ogre::Quaternion(rotZ, Ogre::Vector3::UNIT_Z);
 
-                // Create EnTT Entity and Transform
+                // --- 4c. Create EnTT Entity ---
                 entt::entity entity = mRegistry.create();
                 mRegistry.emplace<TransformComponent>(entity, pos, ori, scale);
 
-                // --- Node Type Dispatch ---
+                // --- 4d. Node Type Dispatch ---
                 if (nodeType == "PrimitiveNode")
                 {
                     std::string meshName = "Cube_d.mesh";
@@ -268,10 +366,10 @@ namespace Demo
                         else if (meshType == 1) meshName = "Sphere1000.mesh";
                     }
 
-                    // Strip "res://" prefix so Ogre can find the datablock named "Material.8" from the editor JSON format
+                    // Strip "res://" prefix to find Ogre datablock
                     if (nodeData.HasMember("material") && nodeData["material"].IsString()) {
                         materialName = nodeData["material"].GetString();
-                        if (materialName.rfind("res://", 0) == 0) { // Starts with res://
+                        if (materialName.rfind("res://", 0) == 0) {
                             materialName = materialName.substr(6);
                         }
                     }
@@ -281,7 +379,6 @@ namespace Demo
                     Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
                     sceneNode->attachObject(item);
 
-                    // Apply initial transform
                     sceneNode->setPosition(pos);
                     sceneNode->setOrientation(ori);
                     sceneNode->setScale(scale);
@@ -290,7 +387,7 @@ namespace Demo
                 }
                 else if (nodeType == "CameraNode")
                 {
-                    if (nodeData.HasMember("fov") && nodeData["fov"].IsDouble()) {
+                    if (nodeData.HasMember("fov") && nodeData["fov"].IsNumber()) {
                         Ogre::Real fov = static_cast<Ogre::Real>(nodeData["fov"].GetDouble());
                         mGraphicsSystem->getCamera()->setFOVy(Ogre::Degree(fov));
                     }
@@ -304,30 +401,32 @@ namespace Demo
                     lightNode->attachObject(light);
                     lightNode->setPosition(pos);
 
+                    // LightType Enum: Point=0, Sun=1
                     if (nodeData.HasMember("lightType") && nodeData["lightType"].IsInt()) {
                         int typeVal = nodeData["lightType"].GetInt();
-                        if (typeVal == 1) {
+                        if (typeVal == 1) { // Sun
                             light->setType(Ogre::Light::LT_DIRECTIONAL);
+                            // Directional lights use orientation (Forward is negative Z)
                             light->setDirection((ori * Ogre::Vector3::NEGATIVE_UNIT_Z).normalisedCopy());
                         }
-                        else {
+                        else { // Point (0)
                             light->setType(Ogre::Light::LT_POINT);
                         }
                     }
 
-                    if (nodeData.HasMember("color")) {
+                    if (nodeData.HasMember("color") && nodeData["color"].IsObject()) {
                         Ogre::ColourValue col = parseColourValue(nodeData["color"], true);
                         light->setDiffuseColour(col);
                         light->setSpecularColour(col);
                     }
 
-                    // FIX: Use intensity for power scale and apply a brightness boost (e.g., 5.0)
-                    if (nodeData.HasMember("intensity") && nodeData["intensity"].IsDouble()) {
+                    // Intensity mapping
+                    if (nodeData.HasMember("intensity") && nodeData["intensity"].IsNumber()) {
                         Ogre::Real intensity = static_cast<Ogre::Real>(nodeData["intensity"].GetDouble());
-                        light->setPowerScale(intensity * 5.0f); // Apply intensity + 5x boost for scene lighting
+                        light->setPowerScale(intensity * 5.0f); // Boost for visibility
                     }
                     else {
-                        light->setPowerScale(1.0f * 5.0f); // Default power with boost
+                        light->setPowerScale(5.0f);
                     }
                 }
             }
