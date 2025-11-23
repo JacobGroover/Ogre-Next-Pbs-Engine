@@ -27,6 +27,12 @@ setupOgre( OGRE_SOURCE, OGRE_BINARIES, OGRE_LIBRARIES, TRUE, TRUE )
 
 add_subdirectory(Dependencies/entt)
 
+# Add the Editor submodule to the build solution
+# Check if the directory exists first (in case submodule isn't initialized)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/editor/src/editor/CMakeLists.txt")
+  add_subdirectory(Dependencies/editor/src/editor)  # NOTE: This is path to CMakeLists.txt, NOT path to the git submodule
+endif()
+
 # Setup our application
 set( EXECUTABLE_OUTPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}" )
 if( MSVC )
