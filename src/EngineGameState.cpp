@@ -358,7 +358,7 @@ namespace Demo
                 if (nodeType == "PrimitiveNode")
                 {
                     std::string meshName = "Cube_d.mesh";
-                    std::string materialName = "BaseWhite";
+                    std::string materialName = "";
 
                     if (nodeData.HasMember("meshType") && nodeData["meshType"].IsInt()) {
                         int meshType = nodeData["meshType"].GetInt();
@@ -375,7 +375,13 @@ namespace Demo
                     }
 
                     Ogre::Item* item = sceneManager->createItem(meshName, Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, Ogre::SCENE_DYNAMIC);
-                    item->setDatablockOrMaterialName(materialName);
+
+                    // Only set the datablock if we actually found a name in the JSON. 
+                    // Otherwise, Ogre::Item uses its default datablock automatically.
+                    if (!materialName.empty()) {
+                        item->setDatablockOrMaterialName(materialName);
+                    }
+
                     Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
                     sceneNode->attachObject(item);
 
@@ -452,62 +458,10 @@ namespace Demo
     //-----------------------------------------------------------------------------------
     void EngineGameState::createScene01()
     {
-        // Parse command line arguments to get scene file
+        // 1. Parse command line arguments to get scene file
         parseCommandLineArgs(mArgc, mArgv);
 
-        // --- 1. Create HLMS Materials (Keep this or move to a separate loading step) ---
-        // It's often better to load/create materials *before* loading the scene that uses them.
-        Ogre::Root* root = mGraphicsSystem->getRoot();
-        Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
-        Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(hlmsManager->getHlms(Ogre::HLMS_PBS));
-
-        // Create a "RedPlastic" material if it doesn't exist
-        Ogre::String datablockName = "RedPlastic";
-        Ogre::HlmsDatablock* datablock = hlmsPbs->getDatablock(datablockName);
-        if (!datablock)
-        {
-            Ogre::HlmsPbsDatablock* pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
-                hlmsPbs->createDatablock(datablockName, datablockName, Ogre::HlmsMacroblock(),
-                    Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-            pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
-            pbsDatablock->setDiffuse(Ogre::Vector3(1.0f, 0.0f, 0.0f));
-            pbsDatablock->setRoughness(0.2f);
-            pbsDatablock->setMetalness(0.0f);
-            Ogre::LogManager::getSingleton().logMessage("Created 'RedPlastic' datablock.");
-        }
-
-        // Create a "PolishedMetal" material if it doesn't exist
-        datablockName = "PolishedMetal";
-        datablock = hlmsPbs->getDatablock(datablockName);
-        if (!datablock)
-        {
-            Ogre::HlmsPbsDatablock* pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
-                hlmsPbs->createDatablock(datablockName, datablockName, Ogre::HlmsMacroblock(),
-                    Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-            pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
-            pbsDatablock->setDiffuse(Ogre::Vector3(0.95f, 0.95f, 0.95f));
-            pbsDatablock->setRoughness(0.1f);
-            pbsDatablock->setMetalness(1.0f);
-            Ogre::LogManager::getSingleton().logMessage("Created 'PolishedMetal' datablock.");
-        }
-        // Add creation for "BaseWhite" or ensure it's loaded from files
-        datablockName = "BaseWhite";
-        datablock = hlmsPbs->getDatablock(datablockName);
-        if (!datablock)
-        {
-            // Consider loading this from a default material file instead
-            Ogre::HlmsPbsDatablock* pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
-                hlmsPbs->createDatablock(datablockName, datablockName, Ogre::HlmsMacroblock(),
-                    Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
-            pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
-            pbsDatablock->setDiffuse(Ogre::Vector3(0.9f, 0.9f, 0.9f));
-            pbsDatablock->setRoughness(0.5f);
-            pbsDatablock->setMetalness(0.0f);
-            Ogre::LogManager::getSingleton().logMessage("Created 'BaseWhite' datablock.");
-        }
-
-
-        // --- 2. Load Scene from JSON ---
+        // 2. Load Scene from JSON
         try {
             loadSceneFromJson(mSceneToLoad); // Assuming the file is passed as a command line argument, or is in a location Ogre can find (e.g., bin/Data if added as resource path)
         }
@@ -518,124 +472,12 @@ namespace Demo
         }
 
 
-        // --- 3. Set up Camera Controller (after potential camera setup from JSON) ---
+        // 3. Set up Camera Controller (after potential camera setup from JSON)
         // Camera position might be overridden by JSON, so create controller after loading
         mCameraController = new CameraController(mGraphicsSystem, false);
 
-        // Call base class setup AFTER loading our scene
+        // 4. Call base class setup AFTER loading our scene, which initializes debug text
         TutorialGameState::createScene01();
-
-  //      Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
-
-  //      // --- 1. Set up Lighting (from PbsMaterials sample) ---
-
-  //      // Set ambient light
-  //      sceneManager->setAmbientLight(Ogre::ColourValue(0.3f, 0.5f, 0.7f) * 0.1f * 0.75f,
-  //          Ogre::ColourValue(0.6f, 0.45f, 0.3f) * 0.065f * 0.75f,
-  //          Ogre::Vector3::UNIT_Y);
-
-  //      // Create a directional light
-  //      Ogre::Light* light = sceneManager->createLight();
-  //      Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode();
-  //      lightNode->attachObject(light);
-  //      light->setPowerScale(1.0f);
-  //      light->setType(Ogre::Light::LT_DIRECTIONAL);
-  //      light->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
-
-  //      // --- 2. Create HLMS Materials (from PbsMaterials sample) ---
-
-  //      Ogre::Root* root = mGraphicsSystem->getRoot();
-  //      Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
-  //      Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(hlmsManager->getHlms(Ogre::HLMS_PBS));
-
-  //      // Create a "RedPlastic" material
-  //      Ogre::String datablockName = "RedPlastic";
-  //      Ogre::HlmsPbsDatablock* pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
-  //          hlmsPbs->createDatablock(datablockName,
-  //              datablockName,
-  //              Ogre::HlmsMacroblock(),
-  //              Ogre::HlmsBlendblock(),
-  //              Ogre::HlmsParamVec()));
-
-		//pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);    // Use metallic workflow to avoid throwing assert
-
-  //      pbsDatablock->setDiffuse(Ogre::Vector3(1.0f, 0.0f, 0.0f));
-  //      pbsDatablock->setRoughness(0.2f);
-  //      pbsDatablock->setMetalness(0.0f);
-
-  //      // Create a "PolishedMetal" material
-  //      datablockName = "PolishedMetal";
-  //      pbsDatablock = static_cast<Ogre::HlmsPbsDatablock*>(
-  //          hlmsPbs->createDatablock(datablockName,
-  //              datablockName,
-  //              Ogre::HlmsMacroblock(),
-  //              Ogre::HlmsBlendblock(),
-  //              Ogre::HlmsParamVec()));
-
-  //      pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);    // Use metallic workflow to avoid throwing assert
-
-  //      pbsDatablock->setDiffuse(Ogre::Vector3(0.95f, 0.95f, 0.95f));
-  //      pbsDatablock->setRoughness(0.1f);
-  //      pbsDatablock->setMetalness(1.0f); // Set to 1.0 for metallic
-
-  //      // --- 4. Create EnTT Entities and attach Ogre Components ---
-
-  //      // Create a 2x2 grid of objects
-  //      const int numX = 2;
-  //      const int numZ = 2;
-  //      const float spacing = 2.5f;
-
-  //      for (int x = 0; x < numX; ++x) // Outer x loop starts
-  //      {
-  //          for (int z = 0; z < numZ; ++z) // Outer z loop starts
-  //          {
-  //              // --- Create EnTT Entity ---
-  //              entt::entity entity = mRegistry.create();
-
-  //              // --- Create Ogre Renderable ---
-  //              Ogre::Item* item;
-  //              if ((x + z) % 2 == 0)
-  //              {
-  //                  item = sceneManager->createItem(
-  //                      "Cube_d.mesh", Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME,
-  //                      Ogre::SCENE_DYNAMIC);
-  //                  item->setDatablock("RedPlastic"); // Assign material here
-  //              }
-  //              else
-  //              {
-  //                  item = sceneManager->createItem(
-  //                      "Sphere1000.mesh", Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME,
-  //                      Ogre::SCENE_DYNAMIC);
-  //                  item->setDatablock("PolishedMetal"); // Assign material here
-  //              }
-
-  //              Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)
-  //                  ->createChildSceneNode(Ogre::SCENE_DYNAMIC);
-  //              sceneNode->attachObject(item);
-
-  //              // --- Attach Components to Entity ---
-
-  //              // 1. Attach the Ogre renderable parts
-  //              mRegistry.emplace<OgreRenderableComponent>(entity, item, sceneNode);
-
-  //              // 2. Attach the transform data
-  //              Ogre::Vector3 initialPos((x - (numX - 1) * 0.5f) * spacing,
-  //                  0.0f,
-  //                  (z - (numZ - 1) * 0.5f) * spacing);
-  //              mRegistry.emplace<TransformComponent>(entity, initialPos);
-
-  //              // 3. Attach the logic component
-  //              mRegistry.emplace<SpinComponent>(entity, (x + z * numX) * 0.1f + 0.5f);
-
-  //          }
-  //      }
-
-  //      // --- 5. Set up Camera ---
-  //      mGraphicsSystem->getCamera()->setPosition(Ogre::Vector3(0, 6, 10));
-  //      mGraphicsSystem->getCamera()->lookAt(Ogre::Vector3(0, 0, 0));
-  //      mCameraController = new CameraController(mGraphicsSystem, false);
-
-  //      TutorialGameState::createScene01();
     }
     //-----------------------------------------------------------------------------------
     void EngineGameState::destroyScene(void) // destroyScene is now correctly within scope
