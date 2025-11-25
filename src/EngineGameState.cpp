@@ -200,6 +200,32 @@ namespace Demo
                     return refName; // Fallback
                     };
 
+                // Determine if a packed map is used for AO, Roughness, and Metallic
+                // If so, set that first for AO, Roughness, and Metallic channels
+                bool hasOrmMap = false;
+                if (resData.HasMember("packedMap") && resData["packedMap"].IsString() && resData["packedMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["packedMap"]);
+                    if (!filename.empty()) {
+                        // Ogre PBS Metallic Workflow: 
+                        // Specular Texture Red = AO
+                        // Specular Texture Green = Roughness
+                        // Specular Texture Blue = Metallic
+
+                        /*pbsDatablock->setTexture(Ogre::PBSM_SPECULAR, filename);*/
+
+                        // Bind the ORM texture to the ROUGHNESS slot.
+                        // We use this slot because our custom shader piece specifically looks at @value(roughness_idx)
+                        pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
+
+                        // Enable our custom shader logic for this specific material
+                        //pbsDatablock->setProperty(Ogre::IdString("USE_ORM_TEXTURE"), 1);
+
+                        //pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+
+                        hasOrmMap = true;
+                    }
+                }
+
                 if (resData.HasMember("albedoTexture") && resData["albedoTexture"].IsString() && resData["albedoTexture"].GetStringLength() > 0) {
                     std::string filename = resolveTextureFile(resData["albedoTexture"]);
                     if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
@@ -208,13 +234,30 @@ namespace Demo
                     std::string filename = resolveTextureFile(resData["normalMap"]);
                     if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_NORMAL, filename);
                 }
-                if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
-                    std::string filename = resolveTextureFile(resData["metallicMap"]);
-                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
-                }
-                if (resData.HasMember("roughnessMap") && resData["roughnessMap"].IsString() && resData["roughnessMap"].GetStringLength() > 0) {
-                    std::string filename = resolveTextureFile(resData["roughnessMap"]);
-                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, filename);
+
+                // Set AO, Roughness, and Metallic maps individually if not using packed map
+                if (!hasOrmMap)
+                {
+                    // Ensure the ORM property is OFF
+                    //pbsDatablock->setProperty(Ogre::IdString("USE_ORM_TEXTURE"), 0);
+
+                    if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
+                        std::string filename = resolveTextureFile(resData["ambientOcclusionMap"]);
+                        if (!filename.empty()) {
+                            // We map AO to the Detail Weight slot (Index 5). 
+                            // Note: Ensure your HLMS shader template uses detail weight map for AO, 
+                            // or pack this into the Specular texture (Red channel) for standard PBS workflows.
+                            pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);   // This currently does nothing in ogre-next unless a custom shader is used (ogre-next expect AO to be packed in red channel of specular/metallic map)
+                        }
+                    }
+                    if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
+                        std::string filename = resolveTextureFile(resData["metallicMap"]);
+                        if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
+                    }
+                    if (resData.HasMember("roughnessMap") && resData["roughnessMap"].IsString() && resData["roughnessMap"].GetStringLength() > 0) {
+                        std::string filename = resolveTextureFile(resData["roughnessMap"]);
+                        if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, filename);
+                    }
                 }
 
                 Ogre::LogManager::getSingleton().logMessage("Configured Material: " + resName, Ogre::LML_NORMAL);
@@ -478,6 +521,31 @@ namespace Demo
 
         // 4. Call base class setup AFTER loading our scene, which initializes debug text
         TutorialGameState::createScene01();
+
+        // [DEBUG START] ISOLATE AMBIENT OCCLUSION
+        //Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
+
+        //// 1. Set a flat, mid-grey Ambient Light. 
+        //// If AO is working, the object will be grey with BLACK cracks.
+        //// If AO is NOT working, the object will be completely flat grey.
+        //sceneManager->setAmbientLight(
+        //    Ogre::ColourValue(0.5f, 0.5f, 0.5f), // Upper Hemisphere
+        //    Ogre::ColourValue(0.5f, 0.5f, 0.5f), // Lower Hemisphere
+        //    Ogre::Vector3::UNIT_Y
+        //);
+
+        //// 2. Disable or Dim the Sun (Directional Lights)
+        //// We iterate through lights to turn off the sun loaded from JSON
+        //Ogre::SceneManager::MovableObjectIterator itor = sceneManager->getMovableObjectIterator("Light");
+        //while (itor.hasMoreElements())
+        //{
+        //    Ogre::Light* light = static_cast<Ogre::Light*>(itor.getNext());
+        //    if (light->getType() == Ogre::Light::LT_DIRECTIONAL)
+        //    {
+        //        light->setPowerScale(0.0f); // Turn off the sun
+        //    }
+        //}
+        // [DEBUG END]
     }
     //-----------------------------------------------------------------------------------
     void EngineGameState::destroyScene(void) // destroyScene is now correctly within scope

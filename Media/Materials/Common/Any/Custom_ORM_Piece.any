@@ -1,0 +1,30 @@
+@piece( custom_ps_posMaterialLoad )
+    // [FIX] Check for 'metallic_map' because we are using MetallicWorkflow
+    @property( metallic_map )
+        
+        // Sample the texture from the Metallic slot (Slot 2)
+        // Ogre defines 'metallic_map_idx' and 'uv_metallic' automatically
+        vec4 ormTex = texture( textureMaps[@value(metallic_map_idx)], inPs.uv@value(uv_metallic) );
+
+        // --- ORM MAPPING ---
+        // Red   = Ambient Occlusion
+        // Green = Roughness
+        // Blue  = Metallic
+
+        // DEBUG ONLY: Output AO as white/black color
+        //pixelData.diffuse.xyz = vec3(ormTex.r, ormTex.r, ormTex.r);
+
+        // 1. Apply Ambient Occlusion
+        // Multiply Albedo (Diffuse) by the Red Channel
+        pixelData.diffuse.xyz *= ormTex.r;
+
+        // 2. Apply Roughness
+        // Overwrite Ogre's default reading with the Green Channel
+        pixelData.roughness = ormTex.g;
+
+        // 3. Apply Metallic
+        // Overwrite Ogre's default reading with the Blue Channel
+        pixelData.metalness = ormTex.b;
+        
+    @end
+@end
