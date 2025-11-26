@@ -184,7 +184,7 @@ namespace Demo
                     Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
                     pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                     // Fix for dark rendering: set Specular to match Diffuse
-                    pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
+                    //pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                 }
 
                 // --- Texture Maps ---
@@ -200,6 +200,13 @@ namespace Demo
                     return refName; // Fallback
                     };
 
+                // Load Albedo (Standard Color)
+                if (resData.HasMember("albedoTexture") && resData["albedoTexture"].IsString() && resData["albedoTexture"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["albedoTexture"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
+                }
+
+                // Load Packed ORM (Occlusion, Roughness, Metallic)
                 // Determine if a packed map is used for AO, Roughness, and Metallic
                 // If so, set that first for AO, Roughness, and Metallic channels
                 bool hasOrmMap = false;
@@ -211,25 +218,49 @@ namespace Demo
                         // Specular Texture Green = Roughness
                         // Specular Texture Blue = Metallic
 
-                        /*pbsDatablock->setTexture(Ogre::PBSM_SPECULAR, filename);*/
+                        Ogre::LogManager::getSingleton().logMessage("Assigning Packed Map: " + filename);
 
-                        // Bind the ORM texture to the ROUGHNESS slot.
-                        // We use this slot because our custom shader piece specifically looks at @value(roughness_idx)
-                        pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
+                        // --- STEP 1: SANITIZE (Before) ---
+                        // Clear out the standard slots so Ogre doesn't try to mix "Ghost" textures 
+                        // with your new Detail map.
+                        pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
+                        pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
+                        // Clear other detail slots if you aren't using them
+                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
 
-                        // Enable our custom shader logic for this specific material
-                        //pbsDatablock->setProperty(Ogre::IdString("USE_ORM_TEXTURE"), 1);
+                        // --- STEP 2: ASSIGN ---
+                        // Now bind the texture. 
+                        // (If we did this before Step 1, it wouldn't matter, but logical order helps).
+                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
 
-                        //pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+                        // --- STEP 3: CONFIGURE ---
+                        // Tell Ogre to use UV Set 0 for Detail Map 0.
+                        pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
+
+                        // Set workflow to Metallic
+                        pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
 
                         hasOrmMap = true;
+
+      //                  pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
+
+      //                  // Tell Ogre to use UV Set 0 for Detail Map 0.
+      //                  // Without this line, Ogre assumes the map is unused and optimizes it out (Black Render).
+      //                  pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
+
+      //                  //pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
+      //                  //pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
+
+      //                  pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
+      //                  //pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
+
+						//// Set workflow to Metallic
+      //                  pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+
+      //                  hasOrmMap = true;
                     }
                 }
 
-                if (resData.HasMember("albedoTexture") && resData["albedoTexture"].IsString() && resData["albedoTexture"].GetStringLength() > 0) {
-                    std::string filename = resolveTextureFile(resData["albedoTexture"]);
-                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
-                }
                 if (resData.HasMember("normalMap") && resData["normalMap"].IsString() && resData["normalMap"].GetStringLength() > 0) {
                     std::string filename = resolveTextureFile(resData["normalMap"]);
                     if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_NORMAL, filename);
@@ -357,17 +388,22 @@ namespace Demo
                     // SceneNode contains ambientLight (default 0.5)
                     if (nodeData.HasMember("ambientLight") && nodeData["ambientLight"].IsNumber())
                     {
-                        float ambientScale = static_cast<float>(nodeData["ambientLight"].GetDouble());
+                        float intensity = static_cast<float>(nodeData["ambientLight"].GetDouble());
 
-                        // Apply this scale to the existing ambient light settings
-                        // Note: We use the upper hemisphere as a baseline reference
-                        Ogre::ColourValue upperHemi = sceneManager->getAmbientLightUpperHemisphere();
-                        Ogre::ColourValue lowerHemi = sceneManager->getAmbientLightLowerHemisphere();
-                        Ogre::Vector3 dir = sceneManager->getAmbientLightHemisphereDir();
+                        // Create a color from the intensity value directly
+                        Ogre::ColourValue ambientColor(intensity, intensity, intensity);
 
-                        // Assuming current values are "base" values, we scale them by the factor from JSON
-                        // Multiplying by 2.0 because 0.5 is default in editor, resulting in 1.0 multiplier
-                        sceneManager->setAmbientLight(upperHemi * ambientScale * 2.0f, lowerHemi * ambientScale * 2.0f, dir);
+                        // Apply to both hemispheres (Upper and Lower)
+                        // Can make the Lower hemisphere darker (e.g., ambientColor * 0.6f) to simulate ground absorption for more realism.
+                        sceneManager->setAmbientLight(
+                            ambientColor,           // Upper Hemisphere
+                            ambientColor,           // Lower Hemisphere
+                            Ogre::Vector3::UNIT_Y,  // Hemisphere Direction (Up)
+                            1.0f                    // Envmap Scale
+                        );
+
+                        Ogre::LogManager::getSingleton().logMessage(
+                            "Set Ambient Light to: " + Ogre::StringConverter::toString(intensity));
                     }
                     continue; // SceneNode is not an entity with a transform, so we skip the rest
                 }
