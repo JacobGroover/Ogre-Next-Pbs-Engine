@@ -161,10 +161,25 @@ namespace Demo
                             Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
                 }
 
+                // ---------------------------------------------------------
+                // SANITIZE (Zero out previous state)
+                // ---------------------------------------------------------
+                // We clear ALL relevant texture slots to prevent Ghost Textures from previous loads.
+                // This ensures we start with a clean slate before applying new JSON data.
+                /*pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_NORMAL, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
+                pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, static_cast<Ogre::TextureGpu*>(nullptr));*/
+
                 // --- Workflow Settings ---
                 pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
 
-                // --- Base Properties ---
+                // ---------------------------------------------------------
+                // Base Properties
+                // ---------------------------------------------------------
                 if (resData.HasMember("roughness") && resData["roughness"].IsNumber()) {
                     pbsDatablock->setRoughness(static_cast<float>(resData["roughness"].GetDouble()));
                 }
@@ -182,7 +197,8 @@ namespace Demo
                 // --- Colors (Albedo) ---
                 if (resData.HasMember("albedo") && resData["albedo"].IsObject()) {
                     Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
-                    pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
+                    //pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
+                    pbsDatablock->setBackgroundDiffuse(albedoColor);
                     // Fix for dark rendering: set Specular to match Diffuse
                     //pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                 }
@@ -200,11 +216,22 @@ namespace Demo
                     return refName; // Fallback
                     };
 
-                // Load Albedo (Standard Color)
+                // ---------------------------------------------------------
+                // Standard Textures (Albedo & Normal)
+                // ---------------------------------------------------------
                 if (resData.HasMember("albedoTexture") && resData["albedoTexture"].IsString() && resData["albedoTexture"].GetStringLength() > 0) {
                     std::string filename = resolveTextureFile(resData["albedoTexture"]);
                     if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
                 }
+
+                if (resData.HasMember("normalMap") && resData["normalMap"].IsString() && resData["normalMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["normalMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_NORMAL, filename);
+                }
+
+                // ---------------------------------------------------------
+                // PBR Workflow (Packed ORM vs. Separate Maps)
+                // ---------------------------------------------------------
 
                 // Load Packed ORM (Occlusion, Roughness, Metallic)
                 // Determine if a packed map is used for AO, Roughness, and Metallic
@@ -220,67 +247,38 @@ namespace Demo
 
                         Ogre::LogManager::getSingleton().logMessage("Assigning Packed Map: " + filename);
 
-                        // --- STEP 1: SANITIZE (Before) ---
-                        // Clear out the standard slots so Ogre doesn't try to mix "Ghost" textures 
-                        // with your new Detail map.
-                        pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
-                        pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
-                        // Clear other detail slots if you aren't using them
-                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
-
-                        // --- STEP 2: ASSIGN ---
-                        // Now bind the texture. 
-                        // (If we did this before Step 1, it wouldn't matter, but logical order helps).
+                        // Assign/bind to DETAIL0 (Slot 6)
                         pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
+                        //pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);
+                        //pbsDatablock->setCustomPieceFile("Custom_ORM_piece_ps.any", );
 
-                        // --- STEP 3: CONFIGURE ---
+                        // Configure UVs (Critical to prevent black render)
                         // Tell Ogre to use UV Set 0 for Detail Map 0.
                         pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
+                        //pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL_WEIGHT, 0);
 
-                        // Set workflow to Metallic
-                        pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
+                        /*if (pbsDatablock->getTexture(Ogre::PBSM_DIFFUSE) == nullptr)
+                        {
+                            pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
+                        }*/
+
+                        pbsDatablock->setDetailMapBlendMode(0, Ogre::PBSM_BLEND_NORMAL_NON_PREMUL);
 
                         hasOrmMap = true;
 
-      //                  pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
-
-      //                  // Tell Ogre to use UV Set 0 for Detail Map 0.
-      //                  // Without this line, Ogre assumes the map is unused and optimizes it out (Black Render).
-      //                  pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
-
-      //                  //pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
-      //                  //pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
-
-      //                  pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
-      //                  //pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
-
-						//// Set workflow to Metallic
-      //                  pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
-
-      //                  hasOrmMap = true;
+                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
                     }
                 }
 
-                if (resData.HasMember("normalMap") && resData["normalMap"].IsString() && resData["normalMap"].GetStringLength() > 0) {
-                    std::string filename = resolveTextureFile(resData["normalMap"]);
-                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_NORMAL, filename);
-                }
-
-                // Set AO, Roughness, and Metallic maps individually if not using packed map
+                // Fallback: Set AO, Roughness, and Metallic maps individually if not using packed map
                 if (!hasOrmMap)
                 {
-                    // Ensure the ORM property is OFF
-                    //pbsDatablock->setProperty(Ogre::IdString("USE_ORM_TEXTURE"), 0);
-
-                    if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
+                    /*if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
                         std::string filename = resolveTextureFile(resData["ambientOcclusionMap"]);
                         if (!filename.empty()) {
-                            // We map AO to the Detail Weight slot (Index 5). 
-                            // Note: Ensure your HLMS shader template uses detail weight map for AO, 
-                            // or pack this into the Specular texture (Red channel) for standard PBS workflows.
-                            pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);   // This currently does nothing in ogre-next unless a custom shader is used (ogre-next expect AO to be packed in red channel of specular/metallic map)
+                            pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);   // This currently does nothing in ogre-next unless a custom shader is used (ogre-next has no native AO implementation)
                         }
-                    }
+                    }*/
                     if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
                         std::string filename = resolveTextureFile(resData["metallicMap"]);
                         if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
