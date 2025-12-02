@@ -233,19 +233,17 @@ namespace Demo
                 // PBR Workflow (Packed ORM vs. Separate Maps)
                 // ---------------------------------------------------------
 
-                // Load Packed ORM (Occlusion, Roughness, Metallic)
+                // Load Packed ORM (Occlusion, Roughness, Metallic). Currently disabled due to Ogre-Next's implementation of Bindless Texture Arrays and Aggressive Batching.
                 // Determine if a packed map is used for AO, Roughness, and Metallic
                 // If so, set that first for AO, Roughness, and Metallic channels
                 bool hasOrmMap = false;
-                if (resData.HasMember("packedMap") && resData["packedMap"].IsString() && resData["packedMap"].GetStringLength() > 0) {
+                /*if (resData.HasMember("packedMap") && resData["packedMap"].IsString() && resData["packedMap"].GetStringLength() > 0) {
                     std::string filename = resolveTextureFile(resData["packedMap"]);
                     if (!filename.empty()) {
-                        // Ogre PBS Metallic Workflow: 
-                        // Specular Texture Red = AO
-                        // Specular Texture Green = Roughness
-                        // Specular Texture Blue = Metallic
 
                         Ogre::LogManager::getSingleton().logMessage("Assigning Packed Map: " + filename);
+
+                        //pbsDatablock->suggestFiltersForType(Ogre::PBSM_DETAIL0);
 
                         // Assign/bind to DETAIL0 (Slot 6)
                         pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
@@ -257,28 +255,24 @@ namespace Demo
                         pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
                         //pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL_WEIGHT, 0);
 
-                        /*if (pbsDatablock->getTexture(Ogre::PBSM_DIFFUSE) == nullptr)
-                        {
-                            pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, filename);
-                        }*/
-
                         pbsDatablock->setDetailMapBlendMode(0, Ogre::PBSM_BLEND_NORMAL_NON_PREMUL);
 
                         hasOrmMap = true;
 
-                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
+                        //pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
                     }
-                }
+                }*/
 
                 // Fallback: Set AO, Roughness, and Metallic maps individually if not using packed map
                 if (!hasOrmMap)
                 {
-                    /*if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
+                    if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
                         std::string filename = resolveTextureFile(resData["ambientOcclusionMap"]);
                         if (!filename.empty()) {
-                            pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);   // This currently does nothing in ogre-next unless a custom shader is used (ogre-next has no native AO implementation)
+                            Ogre::LogManager::getSingleton().logMessage("Assigning Ambient Occlusion Map: " + filename);
+                            pbsDatablock->setTexture(Ogre::PBSM_AO, filename);
                         }
-                    }*/
+                    }
                     if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
                         std::string filename = resolveTextureFile(resData["metallicMap"]);
                         if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
@@ -506,10 +500,10 @@ namespace Demo
                     // Intensity mapping
                     if (nodeData.HasMember("intensity") && nodeData["intensity"].IsNumber()) {
                         Ogre::Real intensity = static_cast<Ogre::Real>(nodeData["intensity"].GetDouble());
-                        light->setPowerScale(intensity * 5.0f); // Boost for visibility
+                        light->setPowerScale(intensity * 1.0f); // Boost for visibility
                     }
                     else {
-                        light->setPowerScale(5.0f);
+                        light->setPowerScale(1.0f);
                     }
                 }
             }
