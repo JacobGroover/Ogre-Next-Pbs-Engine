@@ -645,6 +645,12 @@ namespace Demo
     //-----------------------------------------------------------------------------------
     void EngineGameState::keyReleased( const SDL_KeyboardEvent &arg )
     {
+        // Check if the ESC key was released
+        if (arg.keysym.scancode == SDL_SCANCODE_ESCAPE)
+        {
+            mGraphicsSystem->setQuit();
+        }
+
         if( ( arg.keysym.mod & ~( KMOD_NUM | KMOD_CAPS ) ) != 0 )
         {
             TutorialGameState::keyReleased( arg );
