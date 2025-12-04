@@ -84,8 +84,8 @@ namespace Demo
         mThreadWeight( 0 ),
         mQuit( false ),
         mAlwaysAskForConfig( true ),
-        mUseHlmsDiskCache( true ),
-        mUseMicrocodeCache( true ),
+        mUseHlmsDiskCache( false ),
+        mUseMicrocodeCache( false ),
         mBackgroundColour( backgroundColour )
     {
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
@@ -795,6 +795,7 @@ namespace Demo
             // Create & Register HlmsPbs
             // Do the same for HlmsPbs:
             Ogre::HlmsPbs::getDefaultPaths( mainFolderPath, libraryFoldersPaths );
+            libraryFoldersPaths.push_back("Hlms/Pbs/Custom");
             Ogre::Archive *archivePbs =
                 archiveManager.load( rootHlmsFolder + mainFolderPath, archiveType, true );
 

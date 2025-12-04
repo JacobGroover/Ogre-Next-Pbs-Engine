@@ -15,8 +15,14 @@
 // Include the central components header for EnTT components
 #include "Components/Components.h"
 
+#include "rapidjson/document.h"
+
 namespace Demo
 {
+
+    // Forward declaration for the resource processing helper
+    class GraphicsSystem; // Already declared in GraphicsSystem.h which is included by TutorialGameState.h
+    void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem);
 
     // --- Game State Class ---
     class EngineGameState : public TutorialGameState
@@ -25,10 +31,17 @@ namespace Demo
         /// It manages all entities and their associated components.
         entt::registry mRegistry;
 
+        Ogre::String mSceneToLoad;
+        int mArgc;
+        const char** mArgv;
+
         void generateDebugText( float timeSinceLast, Ogre::String &outText ) override;
 
+        void parseCommandLineArgs( int argc, const char* argv[] );
+        void loadSceneFromJson( const Ogre::String& filename );
+
     public:
-        EngineGameState( const Ogre::String &helpDescription );
+        EngineGameState( const Ogre::String &helpDescription, int argc, const char *argv[] );
 
         void createScene01() override;
         void destroyScene() override;
@@ -36,6 +49,7 @@ namespace Demo
         void update( float timeSinceLast ) override;
 
         void keyReleased( const SDL_KeyboardEvent &arg ) override;
+
     };
 }  // namespace Demo
 

@@ -249,8 +249,8 @@ function( setupOgreSamplesCommon )
 		${CMAKE_SOURCE_DIR}/include/OgreCommon
 		${CMAKE_SOURCE_DIR}/src/OgreCommon/" )
 	include_directories( "${CMAKE_SOURCE_DIR}/include/OgreCommon/" )
-	file( COPY "${OGRE_SOURCE}/Samples/2.0/Common/include/"	DESTINATION "${CMAKE_SOURCE_DIR}/include/OgreCommon/" )
-	file( COPY "${OGRE_SOURCE}/Samples/2.0/Common/src/"		DESTINATION "${CMAKE_SOURCE_DIR}/src/OgreCommon/" )
+  #file( COPY "${OGRE_SOURCE}/Samples/2.0/Common/include/"	DESTINATION "${CMAKE_SOURCE_DIR}/include/OgreCommon/" )
+  #file( COPY "${OGRE_SOURCE}/Samples/2.0/Common/src/"		DESTINATION "${CMAKE_SOURCE_DIR}/src/OgreCommon/" )
 endfunction()
 
 #----------------------------------------------------------------------------------------

@@ -98,7 +98,8 @@ namespace Demo
             If null, outLogicGameState must be null too
         */
         static void createSystems( GameState **outGraphicsGameState, GraphicsSystem **outGraphicsSystem,
-                                   GameState **outLogicGameState, LogicSystem **outLogicSystem );
+                                   GameState **outLogicGameState, LogicSystem **outLogicSystem, 
+                                   int argc, const char *argv[] );
 
         /// Destroys the systems created via createSystems. Implementation should check for null
         /// pointers.

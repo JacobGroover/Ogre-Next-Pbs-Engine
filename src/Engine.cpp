@@ -177,11 +177,13 @@ namespace Demo
         }
     };
 
-    void MainEntryPoints::createSystems( GameState **outGraphicsGameState,
-                                         GraphicsSystem **outGraphicsSystem,
-                                         GameState **outLogicGameState, LogicSystem **outLogicSystem )
+    void MainEntryPoints::createSystems(GameState** outGraphicsGameState,
+        GraphicsSystem** outGraphicsSystem,
+        GameState** outLogicGameState, LogicSystem** outLogicSystem,
+        int argc, const char* argv[])
     {
-        EngineGameState *gfxGameState = new EngineGameState( "(Default GameState text)" );
+        EngineGameState* gfxGameState = new EngineGameState(
+            "(Default GameState text)", argc, argv);
 
         GraphicsSystem *graphicsSystem = new EngineGraphicsSystem( gfxGameState );
 
