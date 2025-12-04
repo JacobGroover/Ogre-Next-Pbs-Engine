@@ -38,7 +38,7 @@
 #include "rapidjson/error/en.h"
 
 // Forward declaration for cleaner code
-void processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem);
+void Demo::processResourcesFromJson(const rapidjson::Document& document, Demo::GraphicsSystem* graphicsSystem);
 
 using namespace Demo;
 
@@ -576,7 +576,7 @@ namespace Demo
         // [DEBUG END]
     }
     //-----------------------------------------------------------------------------------
-    void EngineGameState::destroyScene(void) // destroyScene is now correctly within scope
+    void EngineGameState::destroyScene(void)
     {
         Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
 
@@ -641,6 +641,7 @@ namespace Demo
         outText += "\nEnTT scene with ";
         outText += Ogre::StringConverter::toString(mRegistry.storage<entt::entity>().size());
         outText += " entities.";
+        outText += "\n\nPress ESC key to exit";
     }
     //-----------------------------------------------------------------------------------
     void EngineGameState::keyReleased( const SDL_KeyboardEvent &arg )
