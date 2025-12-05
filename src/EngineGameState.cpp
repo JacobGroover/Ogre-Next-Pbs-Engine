@@ -1,18 +1,26 @@
-
 #include "EngineGameState.h"
 #include "CameraController.h"
 #include "GraphicsSystem.h"
 #include "OgreLogManager.h"
 
-#include "OgreRoot.h"
 #include "OgreSceneManager.h"
 #include "OgreSceneNode.h"
 #include "OgreItem.h"
 #include "OgreLight.h"
 
+#include "OgreOverlay.h"
+#include "OgreOverlayContainer.h"
+#include "OgreOverlayManager.h"
+#include "OgreTextAreaOverlayElement.h"
+
+#include "OgreFrameStats.h"
+#include "OgreRoot.h"
+
 // Ogre-Next HLMS includes
 #include "OgreHlmsManager.h"
 #include "OgreHlms.h"
+#include "OgreGpuProgramManager.h"
+#include "OgreHlmsCompute.h"
 #include "OgreHlmsPbs.h"
 #include "OgreHlmsPbsDatablock.h"
 
@@ -28,13 +36,6 @@
 #include "OgreResourceGroupManager.h"
 #include "OgreStreamSerialiser.h"
 
-// RapidJSON Includes (Assuming Ogre includes provide access, otherwise add manually)
-// If you get compiler errors, you might need to add:
-// #include "rapidjson/document.h"
-// #include "rapidjson/error/en.h"
-// And potentially adjust include paths in CMakeLists.txt if not already accessible.
-// Ogre uses RapidJSON internally, check OgreCommon/System/Desktop/UnitTesting.cpp for include examples.
-//#include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 
 // Forward declaration for cleaner code
@@ -117,7 +118,7 @@ namespace Demo
         Ogre::HlmsPbs* hlmsPbs = static_cast<Ogre::HlmsPbs*>(hlmsManager->getHlms(Ogre::HLMS_PBS));
 
         // --- Pass 1: Map TextureResource Names to File Paths ---
-        // Editor definition: "Texture.9" -> "wood.jpg"
+        // Editor definition mapping: "Texture.9" -> "wood.jpg"
         std::map<std::string, std::string> textureNameToFileMap;
 
         for (rapidjson::SizeType i = 0; i < resources.Size(); ++i)
@@ -136,7 +137,6 @@ namespace Demo
             }
         }
 
-        // Use LML_NORMAL so this appears in the log
         Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(resources.Size()) + " resources.", Ogre::LML_NORMAL);
 
         // --- Pass 2: Create Materials using the Map ---
@@ -161,19 +161,6 @@ namespace Demo
                             Ogre::HlmsBlendblock(), Ogre::HlmsParamVec()));
                 }
 
-                // ---------------------------------------------------------
-                // SANITIZE (Zero out previous state)
-                // ---------------------------------------------------------
-                // We clear ALL relevant texture slots to prevent Ghost Textures from previous loads.
-                // This ensures we start with a clean slate before applying new JSON data.
-                /*pbsDatablock->setTexture(Ogre::PBSM_DIFFUSE, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_NORMAL, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_METALLIC, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_DETAIL1, static_cast<Ogre::TextureGpu*>(nullptr));
-                pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, static_cast<Ogre::TextureGpu*>(nullptr));*/
-
                 // --- Workflow Settings ---
                 pbsDatablock->setWorkflow(Ogre::HlmsPbsDatablock::MetallicWorkflow);
 
@@ -197,10 +184,7 @@ namespace Demo
                 // --- Colors (Albedo) ---
                 if (resData.HasMember("albedo") && resData["albedo"].IsObject()) {
                     Ogre::ColourValue albedoColor = parseColourValue(resData["albedo"], true);
-                    //pbsDatablock->setDiffuse(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                     pbsDatablock->setBackgroundDiffuse(albedoColor);
-                    // Fix for dark rendering: set Specular to match Diffuse
-                    //pbsDatablock->setSpecular(Ogre::Vector3(albedoColor.r, albedoColor.g, albedoColor.b));
                 }
 
                 // --- Texture Maps ---
@@ -232,57 +216,20 @@ namespace Demo
                 // ---------------------------------------------------------
                 // PBR Workflow (Packed ORM vs. Separate Maps)
                 // ---------------------------------------------------------
-
-                // Load Packed ORM (Occlusion, Roughness, Metallic). Currently disabled due to Ogre-Next's implementation of Bindless Texture Arrays and Aggressive Batching.
-                // Determine if a packed map is used for AO, Roughness, and Metallic
-                // If so, set that first for AO, Roughness, and Metallic channels
-                bool hasOrmMap = false;
-                /*if (resData.HasMember("packedMap") && resData["packedMap"].IsString() && resData["packedMap"].GetStringLength() > 0) {
-                    std::string filename = resolveTextureFile(resData["packedMap"]);
+                if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["ambientOcclusionMap"]);
                     if (!filename.empty()) {
-
-                        Ogre::LogManager::getSingleton().logMessage("Assigning Packed Map: " + filename);
-
-                        //pbsDatablock->suggestFiltersForType(Ogre::PBSM_DETAIL0);
-
-                        // Assign/bind to DETAIL0 (Slot 6)
-                        pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, filename);
-                        //pbsDatablock->setTexture(Ogre::PBSM_DETAIL_WEIGHT, filename);
-                        //pbsDatablock->setCustomPieceFile("Custom_ORM_piece_ps.any", );
-
-                        // Configure UVs (Critical to prevent black render)
-                        // Tell Ogre to use UV Set 0 for Detail Map 0.
-                        pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL0, 0);
-                        //pbsDatablock->setTextureUvSource(Ogre::PBSM_DETAIL_WEIGHT, 0);
-
-                        pbsDatablock->setDetailMapBlendMode(0, Ogre::PBSM_BLEND_NORMAL_NON_PREMUL);
-
-                        hasOrmMap = true;
-
-                        //pbsDatablock->setTexture(Ogre::PBSM_DETAIL0, static_cast<Ogre::TextureGpu*>(nullptr));
-                    }
-                }*/
-
-                // Fallback: Set AO, Roughness, and Metallic maps individually if not using packed map
-                if (!hasOrmMap)
-                {
-                    if (resData.HasMember("ambientOcclusionMap") && resData["ambientOcclusionMap"].IsString() && resData["ambientOcclusionMap"].GetStringLength() > 0) {
-                        std::string filename = resolveTextureFile(resData["ambientOcclusionMap"]);
-                        if (!filename.empty()) {
-                            Ogre::LogManager::getSingleton().logMessage("Assigning Ambient Occlusion Map: " + filename);
-                            pbsDatablock->setTexture(Ogre::PBSM_AO, filename);
-                        }
-                    }
-                    if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
-                        std::string filename = resolveTextureFile(resData["metallicMap"]);
-                        if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
-                    }
-                    if (resData.HasMember("roughnessMap") && resData["roughnessMap"].IsString() && resData["roughnessMap"].GetStringLength() > 0) {
-                        std::string filename = resolveTextureFile(resData["roughnessMap"]);
-                        if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, filename);
+                        pbsDatablock->setTexture(Ogre::PBSM_AO, filename);
                     }
                 }
-
+                if (resData.HasMember("metallicMap") && resData["metallicMap"].IsString() && resData["metallicMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["metallicMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_METALLIC, filename);
+                }
+                if (resData.HasMember("roughnessMap") && resData["roughnessMap"].IsString() && resData["roughnessMap"].GetStringLength() > 0) {
+                    std::string filename = resolveTextureFile(resData["roughnessMap"]);
+                    if (!filename.empty()) pbsDatablock->setTexture(Ogre::PBSM_ROUGHNESS, filename);
+                }
                 Ogre::LogManager::getSingleton().logMessage("Configured Material: " + resName, Ogre::LML_NORMAL);
             }
         }
@@ -291,19 +238,37 @@ namespace Demo
 
     EngineGameState::EngineGameState(const Ogre::String& helpDescription,
         int argc, const char* argv[]) :
-        TutorialGameState( helpDescription ),
-        mSceneToLoad( "scene.json" ),  // Default scene if no argument is provided
-		mArgc( argc ),
-        mArgv( argv )
+        mGraphicsSystem( 0 ),
+        mSceneToLoad("scene.json"),
+        mArgc(argc),
+        mArgv(argv),
+        mHelpDescription(helpDescription),
+        mDisplayHelpMode(1),
+        mNumDisplayHelpModes(2),
+        mCameraController( 0 ),
+        mDebugText( 0 ),
+		mDebugTextShadow( 0 )
     {
     }
+    //-----------------------------------------------------------------------------------
+    EngineGameState::~EngineGameState()
+    {
+        // Cleanup CameraController if it wasn't already cleaned up in destroyScene
+        if (mCameraController)
+            delete mCameraController;
+    }
+    //-----------------------------------------------------------------------------------
+    void EngineGameState::_notifyGraphicsSystem(GraphicsSystem* graphicsSystem)
+    {
+        mGraphicsSystem = graphicsSystem;
+	}
     //-----------------------------------------------------------------------------------
     void EngineGameState::loadSceneFromJson(const Ogre::String& filename)
     {
         Ogre::LogManager::getSingleton().logMessage("Loading scene from JSON: " + filename, Ogre::LML_TRIVIAL);
         Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
 
-        // --- 1. Load JSON File ---
+        // ---  Load JSON File ---
         std::string jsonData;
         std::ifstream inFile(filename.c_str(), std::ios::binary | std::ios::in);
 
@@ -325,7 +290,7 @@ namespace Demo
             stream->close();
         }
 
-        // --- 2. Parse JSON ---
+        // --- Parse JSON ---
         rapidjson::Document document;
         document.Parse(jsonData.c_str());
 
@@ -336,7 +301,7 @@ namespace Demo
             return;
         }
 
-        // --- 2.5. Register Project Path as Resource Location ---
+        // --- Register Project Path as Resource Location ---
         // This ensures textures referenced in the JSON can be found by Ogre
         if (document.HasMember("path") && document["path"].IsString()) {
             std::string projectPath = document["path"].GetString();
@@ -357,15 +322,14 @@ namespace Demo
             }
         }
 
-        // --- 3. Process Resources (Materials) ---
+        // --- Process Resources (Materials) ---
         // Must be done before processing nodes so materials are available
         processResourcesFromJson(document, mGraphicsSystem);
 
-        // --- 4. Process Nodes ---
+        // --- Process Nodes ---
         if (document.HasMember("nodes") && document["nodes"].IsArray())
         {
             const auto& nodes = document["nodes"];
-            Ogre::LogManager::getSingleton().logMessage("Processing " + Ogre::StringConverter::toString(nodes.Size()) + " nodes.", Ogre::LML_TRIVIAL);
 
             for (rapidjson::SizeType i = 0; i < nodes.Size(); ++i)
             {
@@ -374,33 +338,21 @@ namespace Demo
 
                 Ogre::String nodeType = nodeData["type"].GetString();
 
-                // --- 4a. Handle SceneNode (Global Settings) ---
+                // --- Handle SceneNode (Global Settings) ---
                 if (nodeType == "SceneNode")
                 {
-                    // SceneNode contains ambientLight (default 0.5)
                     if (nodeData.HasMember("ambientLight") && nodeData["ambientLight"].IsNumber())
                     {
                         float intensity = static_cast<float>(nodeData["ambientLight"].GetDouble());
 
                         // Create a color from the intensity value directly
                         Ogre::ColourValue ambientColor(intensity, intensity, intensity);
-
-                        // Apply to both hemispheres (Upper and Lower)
-                        // Can make the Lower hemisphere darker (e.g., ambientColor * 0.6f) to simulate ground absorption for more realism.
-                        sceneManager->setAmbientLight(
-                            ambientColor,           // Upper Hemisphere
-                            ambientColor,           // Lower Hemisphere
-                            Ogre::Vector3::UNIT_Y,  // Hemisphere Direction (Up)
-                            1.0f                    // Envmap Scale
-                        );
-
-                        Ogre::LogManager::getSingleton().logMessage(
-                            "Set Ambient Light to: " + Ogre::StringConverter::toString(intensity));
+                        sceneManager->setAmbientLight(ambientColor, ambientColor, Ogre::Vector3::UNIT_Y, 1.0f);
                     }
                     continue; // SceneNode is not an entity with a transform, so we skip the rest
                 }
 
-                // --- 4b. Extract Transform Data (Node3D interface) ---
+                // --- Extract Transform Data (Node3D interface) ---
                 Ogre::Vector3 pos = Ogre::Vector3::ZERO;
                 Ogre::Vector3 scale = Ogre::Vector3::UNIT_SCALE;
                 Ogre::Quaternion ori = Ogre::Quaternion::IDENTITY;
@@ -421,11 +373,11 @@ namespace Demo
                 // Z-X-Y Euler order
                 ori = Ogre::Quaternion(rotY, Ogre::Vector3::UNIT_Y) * Ogre::Quaternion(rotX, Ogre::Vector3::UNIT_X) * Ogre::Quaternion(rotZ, Ogre::Vector3::UNIT_Z);
 
-                // --- 4c. Create EnTT Entity ---
+                // --- Create EnTT Entity ---
                 entt::entity entity = mRegistry.create();
                 mRegistry.emplace<TransformComponent>(entity, pos, ori, scale);
 
-                // --- 4d. Node Type Dispatch ---
+                // --- Node Type Dispatch ---
                 if (nodeType == "PrimitiveNode")
                 {
                     std::string meshName = "Cube_d.mesh";
@@ -455,7 +407,6 @@ namespace Demo
 
                     Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
                     sceneNode->attachObject(item);
-
                     sceneNode->setPosition(pos);
                     sceneNode->setOrientation(ori);
                     sceneNode->setScale(scale);
@@ -486,7 +437,7 @@ namespace Demo
                             // Directional lights use orientation (Forward is negative Z)
                             light->setDirection((ori * Ogre::Vector3::NEGATIVE_UNIT_Z).normalisedCopy());
                         }
-                        else { // Point (0)
+                        else { // Point
                             light->setType(Ogre::Light::LT_POINT);
                         }
                     }
@@ -500,7 +451,7 @@ namespace Demo
                     // Intensity mapping
                     if (nodeData.HasMember("intensity") && nodeData["intensity"].IsNumber()) {
                         Ogre::Real intensity = static_cast<Ogre::Real>(nodeData["intensity"].GetDouble());
-                        light->setPowerScale(intensity * 1.0f); // Boost for visibility
+                        light->setPowerScale(intensity * 1.0f);
                     }
                     else {
                         light->setPowerScale(1.0f);
@@ -508,8 +459,6 @@ namespace Demo
                 }
             }
         }
-
-        Ogre::LogManager::getSingleton().logMessage("Finished loading scene.", Ogre::LML_TRIVIAL);
     }
     //-----------------------------------------------------------------------------------
     void EngineGameState::parseCommandLineArgs(int argc, const char* argv[])
@@ -534,7 +483,7 @@ namespace Demo
 
         // 2. Load Scene from JSON
         try {
-            loadSceneFromJson(mSceneToLoad); // Assuming the file is passed as a command line argument, or is in a location Ogre can find (e.g., bin/Data if added as resource path)
+            loadSceneFromJson(mSceneToLoad);
         }
         catch (Ogre::Exception& e) {
             Ogre::LogManager::getSingleton().logMessage("Failed to load scene from JSON: " + e.getFullDescription(), Ogre::LML_CRITICAL);
@@ -542,76 +491,77 @@ namespace Demo
             // For now, we'll just log and continue with an potentially empty scene
         }
 
-
         // 3. Set up Camera Controller (after potential camera setup from JSON)
         // Camera position might be overridden by JSON, so create controller after loading
         mCameraController = new CameraController(mGraphicsSystem, false);
 
-        // 4. Call base class setup AFTER loading our scene, which initializes debug text
-        TutorialGameState::createScene01();
-
-        // [DEBUG START] ISOLATE AMBIENT OCCLUSION
-        //Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
-
-        //// 1. Set a flat, mid-grey Ambient Light. 
-        //// If AO is working, the object will be grey with BLACK cracks.
-        //// If AO is NOT working, the object will be completely flat grey.
-        //sceneManager->setAmbientLight(
-        //    Ogre::ColourValue(0.5f, 0.5f, 0.5f), // Upper Hemisphere
-        //    Ogre::ColourValue(0.5f, 0.5f, 0.5f), // Lower Hemisphere
-        //    Ogre::Vector3::UNIT_Y
-        //);
-
-        //// 2. Disable or Dim the Sun (Directional Lights)
-        //// We iterate through lights to turn off the sun loaded from JSON
-        //Ogre::SceneManager::MovableObjectIterator itor = sceneManager->getMovableObjectIterator("Light");
-        //while (itor.hasMoreElements())
-        //{
-        //    Ogre::Light* light = static_cast<Ogre::Light*>(itor.getNext());
-        //    if (light->getType() == Ogre::Light::LT_DIRECTIONAL)
-        //    {
-        //        light->setPowerScale(0.0f); // Turn off the sun
-        //    }
-        //}
-        // [DEBUG END]
+        // 4. Create Debug Text Overlay
+        createDebugTextOverlay();
     }
     //-----------------------------------------------------------------------------------
-    void EngineGameState::destroyScene(void)
+    void EngineGameState::createDebugTextOverlay()
+    {
+        Ogre::v1::OverlayManager& overlayManager = Ogre::v1::OverlayManager::getSingleton();
+        Ogre::v1::Overlay* overlay = overlayManager.create("DebugText");
+
+        Ogre::v1::OverlayContainer* panel = static_cast<Ogre::v1::OverlayContainer*>(
+            overlayManager.createOverlayElement("Panel", "DebugPanel"));
+        mDebugText = static_cast<Ogre::v1::TextAreaOverlayElement*>(
+            overlayManager.createOverlayElement("TextArea", "DebugText"));
+        mDebugText->setFontName("DebugFont");
+        mDebugText->setCharHeight(0.025f);
+
+        mDebugTextShadow = static_cast<Ogre::v1::TextAreaOverlayElement*>(
+            overlayManager.createOverlayElement("TextArea", "0DebugTextShadow"));
+        mDebugTextShadow->setFontName("DebugFont");
+        mDebugTextShadow->setCharHeight(0.025f);
+        mDebugTextShadow->setColour(Ogre::ColourValue::Black);
+        mDebugTextShadow->setPosition(0.002f, 0.002f);
+
+        panel->addChild(mDebugTextShadow);
+        panel->addChild(mDebugText);
+        overlay->add2D(panel);
+        overlay->show();
+    }
+    //-----------------------------------------------------------------------------------
+    void EngineGameState::destroyScene()
     {
         Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
 
         // --- EnTT Cleanup System ---
-        // We must manually destroy the Ogre objects we created.
-
         auto view = mRegistry.view<OgreRenderableComponent>();
         for (auto entity : view)
         {
             auto& renderable = view.get<OgreRenderableComponent>(entity);
-
-            // Detach from node
             renderable.sceneNode->detachAllObjects();
-
-            // Destroy the Ogre objects
             sceneManager->destroyItem(renderable.item);
             sceneManager->destroySceneNode(renderable.sceneNode);
         }
-
-        // Clear the registry, which destroys all components
         mRegistry.clear();
 
-        // Call base class cleanup
-        TutorialGameState::destroyScene();
+        // Cleanup Camera Controller
+        if (mCameraController)
+        {
+            delete mCameraController;
+            mCameraController = 0;
+        }
     };
     //-----------------------------------------------------------------------------------
-
     void EngineGameState::update(float timeSinceLast)
     {
-        // First, call the base update
-        TutorialGameState::update(timeSinceLast);
+        if (mDisplayHelpMode != 0)
+        {
+            // Show FPS
+            Ogre::String finalText;
+            generateDebugText(timeSinceLast, finalText);
+            mDebugText->setCaption(finalText);
+            mDebugTextShadow->setCaption(finalText);
+        }
+
+        if (mCameraController)
+            mCameraController->update(timeSinceLast);
 
         // --- 1. Logic System: SpinSystem ---
-        // This system updates the "data" (TransformComponent) based on "logic" (SpinComponent).
-        // It knows nothing about Ogre.
         {
             auto spinView = mRegistry.view<TransformComponent, const SpinComponent>();
             for (auto [entity, transform, spin] : spinView.each())
@@ -622,8 +572,6 @@ namespace Demo
         }
 
         // --- 2. Render Sync System ---
-        // This system reads the "data" (TransformComponent) and updates the
-        // "render" (OgreRenderableComponent::sceneNode).
         {
             auto renderView = mRegistry.view<const OgreRenderableComponent, const TransformComponent>();
             for (auto [entity, renderable, transform] : renderView.each())
@@ -635,29 +583,186 @@ namespace Demo
         }
     }
     //-----------------------------------------------------------------------------------
-    void EngineGameState::generateDebugText( float timeSinceLast, Ogre::String &outText )
+    void EngineGameState::generateDebugText( float timeSinceLast, Ogre::String& outText )
     {
-        TutorialGameState::generateDebugText( timeSinceLast, outText );
-        outText += "\nEnTT scene with ";
-        outText += Ogre::StringConverter::toString(mRegistry.storage<entt::entity>().size());
-        outText += " entities.";
-        outText += "\n\nPress ESC key to exit";
+        if (mDisplayHelpMode == 0)
+        {
+            outText = mHelpDescription;
+            outText += "\n\nPress F1 to toggle help";
+            outText +=
+                "\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
+                "Ctrl+F2 reloads Unlit shaders.\n"
+                "Ctrl+F3 reloads Compute shaders.\n"
+                "Note: If the modified templates produce invalid shader code, "
+                "crashes or exceptions can happen.\n";
+            return;
+        }
+
+        const Ogre::FrameStats* frameStats = mGraphicsSystem->getRoot()->getFrameStats();
+
+        Ogre::String finalText;
+        finalText.reserve(128);
+        finalText = "Frame time:\t";
+        finalText += Ogre::StringConverter::toString(timeSinceLast * 1000.0f);
+        finalText += " ms\n";
+        finalText += "Frame FPS:\t";
+        finalText += Ogre::StringConverter::toString(1.0f / timeSinceLast);
+        finalText += "\nAvg time:\t";
+        finalText += Ogre::StringConverter::toString(frameStats->getRollingAverage() * 1000.0);
+        finalText += " ms\n";
+        finalText += "Avg FPS:\t";
+        finalText += Ogre::StringConverter::toString(frameStats->getRollingAverageFps());
+        finalText += "\n\nPress F1 to toggle help";
+
+        finalText += "\n\nEnTT scene with ";
+        finalText += Ogre::StringConverter::toString(mRegistry.storage<entt::entity>().size());
+        finalText += " entities.";
+        finalText += "\n\nPress ESC key to exit";
+
+        outText.swap(finalText);
+
+        mDebugText->setCaption(finalText);
+        mDebugTextShadow->setCaption(finalText);
     }
     //-----------------------------------------------------------------------------------
-    void EngineGameState::keyReleased( const SDL_KeyboardEvent &arg )
+    // INPUT HANDLING
+    //-----------------------------------------------------------------------------------
+    void EngineGameState::keyPressed(const SDL_KeyboardEvent& arg)
     {
-        // Check if the ESC key was released
+        bool handledEvent = false;
+
+        if (mCameraController)
+            handledEvent = mCameraController->keyPressed(arg);
+
+        if (!handledEvent)
+            GameState::keyPressed(arg);
+    }
+    //-----------------------------------------------------------------------------------
+    void EngineGameState::keyReleased(const SDL_KeyboardEvent& arg)
+    {
+        // ESC Key to Exit
         if (arg.keysym.scancode == SDL_SCANCODE_ESCAPE)
         {
             mGraphicsSystem->setQuit();
         }
 
-        if( ( arg.keysym.mod & ~( KMOD_NUM | KMOD_CAPS ) ) != 0 )
-        {
-            TutorialGameState::keyReleased( arg );
-            return;
-        }
+        if (mCameraController)
+            mCameraController->keyReleased(arg);
 
-        TutorialGameState::keyReleased( arg );
+        if (arg.keysym.scancode == SDL_SCANCODE_F1 &&
+            (arg.keysym.mod & ~(KMOD_NUM | KMOD_CAPS)) == 0)
+        {
+            mDisplayHelpMode = (mDisplayHelpMode + 1) % mNumDisplayHelpModes;
+
+            Ogre::String finalText;
+            generateDebugText(0, finalText);
+            mDebugText->setCaption(finalText);
+            mDebugTextShadow->setCaption(finalText);
+        }
+        else if (arg.keysym.scancode == SDL_SCANCODE_F1 &&
+            (arg.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+        {
+            // Hot reload of PBS shaders. We need to clear the microcode cache
+            // to prevent using old compiled versions.
+            Ogre::Root* root = mGraphicsSystem->getRoot();
+            Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
+
+            Ogre::Hlms* hlms = hlmsManager->getHlms(Ogre::HLMS_PBS);
+            Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
+            hlms->reloadFrom(hlms->getDataFolder());
+        }
+        else if (arg.keysym.scancode == SDL_SCANCODE_F2 &&
+            (arg.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+        {
+            // Hot reload of Unlit shaders.
+            Ogre::Root* root = mGraphicsSystem->getRoot();
+            Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
+
+            Ogre::Hlms* hlms = hlmsManager->getHlms(Ogre::HLMS_UNLIT);
+            Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
+            hlms->reloadFrom(hlms->getDataFolder());
+        }
+        else if (arg.keysym.scancode == SDL_SCANCODE_F3 &&
+            (arg.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+        {
+            // Hot reload of Compute shaders.
+            Ogre::Root* root = mGraphicsSystem->getRoot();
+            Ogre::HlmsManager* hlmsManager = root->getHlmsManager();
+
+            Ogre::Hlms* hlms = hlmsManager->getComputeHlms();
+            Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
+            hlms->reloadFrom(hlms->getDataFolder());
+        }
+        else if (arg.keysym.scancode == SDL_SCANCODE_F5 &&
+            (arg.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+        {
+            // Force device reelection
+            Ogre::Root* root = mGraphicsSystem->getRoot();
+            root->getRenderSystem()->validateDevice(true);
+        }
+        else
+        {
+            bool handledEvent = false;
+
+            if (mCameraController)
+                handledEvent = mCameraController->keyReleased(arg);
+
+            if (!handledEvent)
+                GameState::keyReleased(arg);
+        }
     }
+    //-----------------------------------------------------------------------------------
+    void EngineGameState::mouseMoved( const SDL_Event& arg )
+    {
+        if ( mCameraController )
+            mCameraController->mouseMoved ( arg );
+
+        GameState::mouseMoved( arg );
+    }
+    //-----------------------------------------------------------------------------------
+
+    /*
+    void EngineGameState::mouseMoved(const SDL_MouseMotionEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->mouseMoved(arg);
+    }
+
+    void EngineGameState::mousePressed(const SDL_MouseButtonEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->mousePressed(arg);
+    }
+
+    void EngineGameState::mouseReleased(const SDL_MouseButtonEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->mouseReleased(arg);
+    }
+
+    void EngineGameState::textInput(const SDL_TextInputEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->textInput(arg);
+    }
+
+    void EngineGameState::controllerAxisMoved(const SDL_ControllerAxisEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->controllerAxisMoved(arg);
+    }
+
+    void EngineGameState::controllerButtonPressed(const SDL_ControllerButtonEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->controllerButtonPressed(arg);
+    }
+
+    void EngineGameState::controllerButtonReleased(const SDL_ControllerButtonEvent& arg)
+    {
+        if (mCameraController)
+            mCameraController->controllerButtonReleased(arg);
+    }
+    */
+
 }  // namespace Demo
