@@ -620,12 +620,13 @@ namespace Demo
         if (mDisplayHelpMode == 0)
         {
             outText = mHelpDescription;
-            outText += "\n\nPress F1 to toggle help\n\n";
             outText +=
                 "WASD  : Move Camera\n"
-                "Shift : Speed Boost\n"
+                "Shift : Speed Boost (while holding down)\n"
                 "Mouse : Look Around\n"
                 "Q     : Toggle Spin on all objects (cubes and spheres, not lights or cameras)\n";
+                "ESC   : Exit Application";
+            outText += "\n\nPress F1 to toggle help/stats\n\n";
                 /*"\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
                 "Ctrl+F2 reloads Unlit shaders.\n"
                 "Ctrl+F3 reloads Compute shaders.\n"
@@ -648,12 +649,26 @@ namespace Demo
         finalText += " ms\n";
         finalText += "Avg FPS:\t";
         finalText += Ogre::StringConverter::toString(frameStats->getRollingAverageFps());
-        finalText += "\n\nPress F1 to toggle help";
+
+        // Camera Debug Info
+        Ogre::Camera* camera = mGraphicsSystem->getCamera();
+        if (camera)
+        {
+            Ogre::Vector3 camPos = camera->getPosition();
+            Ogre::Quaternion camOri = camera->getOrientation();
+
+            finalText += "\n\n[Camera]";
+            finalText += "\nPos: " + Ogre::StringConverter::toString(camPos);
+            // Ogre::Quaternion toString format is "w, x, y, z"
+            finalText += "\nOri: " + Ogre::StringConverter::toString(camOri);
+        }
+		// end camera debug info
 
         finalText += "\n\nEnTT scene with ";
         finalText += Ogre::StringConverter::toString(mRegistry.storage<entt::entity>().size());
         finalText += " entities.";
-        finalText += "\n\nPress ESC key to exit";
+
+        finalText += "\n\nPress F1 to toggle help/stats";
 
         outText.swap(finalText);
 
