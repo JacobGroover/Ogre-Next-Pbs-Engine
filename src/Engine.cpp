@@ -183,7 +183,7 @@ namespace Demo
         int argc, const char* argv[])
     {
         EngineGameState* gfxGameState = new EngineGameState(
-            "(Default GameState text)", argc, argv);
+            "", argc, argv);
 
         GraphicsSystem *graphicsSystem = new EngineGraphicsSystem( gfxGameState );
 
