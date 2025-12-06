@@ -377,6 +377,16 @@ namespace Demo
                 entt::entity entity = mRegistry.create();
                 mRegistry.emplace<TransformComponent>(entity, pos, ori, scale);
 
+                // --- Create the SceneNode (Common to all types) ---
+                // Note: We attach the specific object (Item/Light/Camera etc.) to this node below
+                Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
+                sceneNode->setPosition(pos);
+                sceneNode->setOrientation(ori);
+                sceneNode->setScale(scale);
+
+                // Register the SceneNodeComponent so it gets updated (so the Render Sync System can find and update it)
+                mRegistry.emplace<SceneNodeComponent>(entity, sceneNode);
+
                 // --- Node Type Dispatch ---
                 if (nodeType == "PrimitiveNode")
                 {
@@ -405,13 +415,10 @@ namespace Demo
                         item->setDatablockOrMaterialName(materialName);
                     }
 
-                    Ogre::SceneNode* sceneNode = sceneManager->getRootSceneNode(Ogre::SCENE_DYNAMIC)->createChildSceneNode(Ogre::SCENE_DYNAMIC);
                     sceneNode->attachObject(item);
-                    sceneNode->setPosition(pos);
-                    sceneNode->setOrientation(ori);
-                    sceneNode->setScale(scale);
 
-                    mRegistry.emplace<OgreRenderableComponent>(entity, item, sceneNode);
+                    // Add specific Item component to ECS registry
+                    mRegistry.emplace<ItemComponent>(entity, item);
                 }
                 else if (nodeType == "CameraNode")
                 {
@@ -421,13 +428,14 @@ namespace Demo
                     }
                     mGraphicsSystem->getCamera()->setPosition(pos);
                     mGraphicsSystem->getCamera()->setOrientation(ori);
+                    // Usually main camera isn't attached to a node in this specific demo structure,
+                    // but if it were a game object camera:
+                    // mRegistry.emplace<CameraComponent>(entity, mGraphicsSystem->getCamera());
                 }
                 else if (nodeType == "LightNode")
                 {
                     Ogre::Light* light = sceneManager->createLight();
-                    Ogre::SceneNode* lightNode = sceneManager->getRootSceneNode()->createChildSceneNode();
-                    lightNode->attachObject(light);
-                    lightNode->setPosition(pos);
+                    sceneNode->attachObject(light);
 
                     // LightType Enum: Point=0, Sun=1
                     if (nodeData.HasMember("lightType") && nodeData["lightType"].IsInt()) {
@@ -456,6 +464,9 @@ namespace Demo
                     else {
                         light->setPowerScale(1.0f);
                     }
+
+                    // Add specific Light component to ECS registry
+                    mRegistry.emplace<LightComponent>(entity, light);
                 }
             }
         }
@@ -528,24 +539,45 @@ namespace Demo
     {
         Ogre::SceneManager* sceneManager = mGraphicsSystem->getSceneManager();
 
-        // --- EnTT Cleanup System ---
-        auto view = mRegistry.view<OgreRenderableComponent>();
-        for (auto entity : view)
+        // Destroy Items (Meshes)
+        auto itemView = mRegistry.view<ItemComponent>();
+        for (auto [entity, itemComp] : itemView.each())
         {
-            auto& renderable = view.get<OgreRenderableComponent>(entity);
-            renderable.sceneNode->detachAllObjects();
-            sceneManager->destroyItem(renderable.item);
-            sceneManager->destroySceneNode(renderable.sceneNode);
+            sceneManager->destroyItem(itemComp.item);
         }
+
+        // Destroy Lights
+        auto lightView = mRegistry.view<LightComponent>();
+        for (auto [entity, lightComp] : lightView.each())
+        {
+            sceneManager->destroyLight(lightComp.light);
+        }
+
+        // Destroy Cameras
+        auto camView = mRegistry.view<CameraComponent>();
+        for (auto [entity, camComp] : camView.each())
+        {
+            sceneManager->destroyCamera(camComp.camera);
+        }
+
+        // Destroy SceneNodes
+        // We do this LAST. Since we destroyed the attached objects above, 
+        // the nodes are empty and safe to destroy.
+        auto nodeView = mRegistry.view<SceneNodeComponent>();
+        for (auto [entity, nodeComp] : nodeView.each())
+        {
+            sceneManager->destroySceneNode(nodeComp.sceneNode);
+        }
+
+        // Wipe Registry
         mRegistry.clear();
 
-        // Cleanup Camera Controller
         if (mCameraController)
         {
             delete mCameraController;
-            mCameraController = 0;
+            mCameraController = nullptr;
         }
-    };
+    }
     //-----------------------------------------------------------------------------------
     void EngineGameState::update(float timeSinceLast)
     {
@@ -564,7 +596,7 @@ namespace Demo
         // --- 1. Logic System: SpinSystem ---
         {
             auto spinView = mRegistry.view<TransformComponent, const SpinComponent>();
-            for (auto [entity, transform, spin] : spinView.each())
+            for (auto&& [entity, transform, spin] : spinView.each())
             {
                 Ogre::Quaternion rot(Ogre::Radian(spin.spinSpeed * timeSinceLast), Ogre::Vector3::UNIT_Y);
                 transform.orientation = transform.orientation * rot;
@@ -573,12 +605,12 @@ namespace Demo
 
         // --- 2. Render Sync System ---
         {
-            auto renderView = mRegistry.view<const OgreRenderableComponent, const TransformComponent>();
-            for (auto [entity, renderable, transform] : renderView.each())
+            auto renderView = mRegistry.view<const SceneNodeComponent, const TransformComponent>();
+            for (auto [entity, nodeComp, transform] : renderView.each())
             {
-                renderable.sceneNode->setPosition(transform.position);
-                renderable.sceneNode->setOrientation(transform.orientation);
-                renderable.sceneNode->setScale(transform.scale);
+                nodeComp.sceneNode->setPosition(transform.position);
+                nodeComp.sceneNode->setOrientation(transform.orientation);
+                nodeComp.sceneNode->setScale(transform.scale);
             }
         }
     }
@@ -588,13 +620,17 @@ namespace Demo
         if (mDisplayHelpMode == 0)
         {
             outText = mHelpDescription;
-            outText += "\n\nPress F1 to toggle help";
+            outText += "\n\nPress F1 to toggle help\n\n";
             outText +=
-                "\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
+                "WASD  : Move Camera\n"
+                "Shift : Speed Boost\n"
+                "Mouse : Look Around\n"
+                "Q     : Toggle Spin on all objects (cubes and spheres, not lights or cameras)\n";
+                /*"\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
                 "Ctrl+F2 reloads Unlit shaders.\n"
                 "Ctrl+F3 reloads Compute shaders.\n"
                 "Note: If the modified templates produce invalid shader code, "
-                "crashes or exceptions can happen.\n";
+                "crashes or exceptions can happen.\n";*/
             return;
         }
 
@@ -629,6 +665,29 @@ namespace Demo
     //-----------------------------------------------------------------------------------
     void EngineGameState::keyPressed(const SDL_KeyboardEvent& arg)
     {
+        // Press Q to toggle spinning on all scene objects
+        if (arg.keysym.sym == SDLK_q)
+        {
+            // Iterate over all ItemComponent entities that have a SceneNode attached 
+            auto view = mRegistry.view<ItemComponent>();
+
+            for (auto entity : view)
+            {
+                // Check if the entity already has a SpinComponent
+                if (mRegistry.all_of<SpinComponent>(entity))
+                {
+                    // If it does, stop spinning by removing the component
+                    mRegistry.remove<SpinComponent>(entity);
+                }
+                else
+                {
+                    // If it doesn't, start spinning by adding the component
+                    // Speed: 1.0 radian per second
+                    mRegistry.emplace<SpinComponent>(entity, 1.0f);
+                }
+            }
+        }
+
         bool handledEvent = false;
 
         if (mCameraController)

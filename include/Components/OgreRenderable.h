@@ -4,18 +4,35 @@
 // Forward-declare Ogre classes to avoid including heavy headers here
 namespace Ogre
 {
-    class Item;
     class SceneNode;
+    class Item;
+    class Light;
+    class Camera;
 }
 
-/**
- @brief This component holds the Ogre-Next rendering objects.
- The ECS logic systems will update these based on other components.
-*/
-struct OgreRenderableComponent
+// The Anchor: Holds the Node. 
+// REQUIRED for the RenderSyncSystem to update position/rotation.
+struct SceneNodeComponent
+{
+    Ogre::SceneNode* sceneNode;
+};
+
+// The Mesh: Holds the Item (Visual geometry)
+struct ItemComponent
 {
     Ogre::Item* item;
-    Ogre::SceneNode* sceneNode;
+};
+
+// The Light: Holds the Light
+struct LightComponent
+{
+    Ogre::Light* light;
+};
+
+// The Camera: Holds the Camera
+struct CameraComponent
+{
+    Ogre::Camera* camera;
 };
 
 #endif // _Engine_Component_OgreRenderable_H_
