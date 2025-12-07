@@ -505,7 +505,7 @@ namespace Demo
             );
 
             // Fallback logic
-            Ogre::String fallbackScene = "../Data/Media/SampleProject/project.json";
+            Ogre::String fallbackScene = "../Data/SampleProject/project.json";
             Ogre::LogManager::getSingleton().logMessage(
                 "Attempting to load fallback scene: " + fallbackScene,
                 Ogre::LML_NORMAL
