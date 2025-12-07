@@ -493,13 +493,36 @@ namespace Demo
         parseCommandLineArgs(mArgc, mArgv);
 
         // 2. Load Scene from JSON
-        try {
+        try
+        {
             loadSceneFromJson(mSceneToLoad);
         }
-        catch (Ogre::Exception& e) {
-            Ogre::LogManager::getSingleton().logMessage("Failed to load scene from JSON: " + e.getFullDescription(), Ogre::LML_CRITICAL);
-            // Handle the error, maybe load a fallback scene or show an error message
-            // For now, we'll just log and continue with an potentially empty scene
+        catch (Ogre::Exception& e)
+        {
+            Ogre::LogManager::getSingleton().logMessage(
+                "Failed to load user scene '" + mSceneToLoad + "': " + e.getFullDescription(),
+                Ogre::LML_CRITICAL
+            );
+
+            // Fallback logic
+            Ogre::String fallbackScene = "../Data/Media/SampleProject/project.json";
+            Ogre::LogManager::getSingleton().logMessage(
+                "Attempting to load fallback scene: " + fallbackScene,
+                Ogre::LML_NORMAL
+            );
+
+            try
+            {
+                loadSceneFromJson(fallbackScene);
+            }
+            catch (Ogre::Exception& eFallback)
+            {
+                Ogre::LogManager::getSingleton().logMessage(
+                    "CRITICAL: Failed to load fallback scene. Engine may start with empty scene. Error: " +
+                    eFallback.getFullDescription(),
+                    Ogre::LML_CRITICAL
+                );
+            }
         }
 
         // 3. Set up Camera Controller (after potential camera setup from JSON)
