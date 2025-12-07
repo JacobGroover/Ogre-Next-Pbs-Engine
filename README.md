@@ -8,17 +8,23 @@ It provides a modular framework for rendering, input, and game state management,
 
 ## Setup (For Windows)
 
-- Install python 3.11 https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues later in development)
-
 - Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/
 
-- Install Vulkan SDK https://vulkan.lunarg.com/ 
+- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ (Anywhere you set the environment variable should work after it is installed, but the project expects it to be installed directly in the default location at C:\wxWidgets)
+
+- (OPTIONAL: for ogre-next engine scripts if you want to play around with them) Install python 3.11 https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues later in development)
+
+- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with D3D11 and/or OpenGL 3+ on Windows if you do not install this) Install Vulkan SDK https://vulkan.lunarg.com/ 
 
 - Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere)
 
 - Download the Engine_Build_Visual_Studio_17_2022_x64.bat in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
 
 - Run the Engine_Build_Visual_Studio_17_2022_x64.bat file
+
+- After the project is done downloading, and building, navigate to ...\Engine\bin\Debug and run editor.exe
+
+- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine.exe to playtest the scene!
 
 ---
 
