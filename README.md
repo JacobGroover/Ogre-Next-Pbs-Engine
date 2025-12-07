@@ -22,9 +22,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Visual_Studio_17_2022_x64.bat file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor.exe
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor.exe to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine.exe directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
 
-- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine.exe to playtest the scene!
+- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine.exe to playtest the scene!
 
 ---
 
@@ -48,9 +48,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Unix.sh file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
 
-- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
+- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
 
 ---
 
@@ -76,9 +76,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Unix.sh file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
 
-- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
+- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
 
 ---
 
