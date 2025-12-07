@@ -117,9 +117,14 @@ cd build
 echo --- Building Engine ---
 %CMAKE_BIN% -G %GENERATOR% -A %PLATFORM% ..
 %CMAKE_BIN% --build . --config Debug
-%CMAKE_BIN% --build . --target install --config Debug
+
+REM (Add the following line back when ready to package the game engine for distribution)
+REM %CMAKE_BIN% --build . --target install --config Debug
+
 %CMAKE_BIN% --build . --config Release
-%CMAKE_BIN% --build . --target install --config Release
+
+REM (Add the following line back when ready to package the game engine for distribution)
+REM %CMAKE_BIN% --build . --target install --config Release
 
 
 echo.
