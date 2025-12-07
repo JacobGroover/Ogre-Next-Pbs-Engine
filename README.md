@@ -12,9 +12,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ (Anywhere you set the environment variable should work after it is installed, but the project expects it to be installed directly in the default location at C:\wxWidgets)
 
-- (OPTIONAL: for ogre-next engine scripts if you want to play around with them) Install python 3.11 https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues later in development)
+- Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
 
-- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with D3D11 and/or OpenGL 3+ on Windows if you do not install this) Install Vulkan SDK https://vulkan.lunarg.com/ 
+- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with D3D11 and/or OpenGL 3+ on Windows if you do not install this) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/ 
 
 - Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere)
 
@@ -22,9 +22,63 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Visual_Studio_17_2022_x64.bat file
 
-- After the project is done downloading, and building, navigate to ...\Engine\bin\Debug and run editor.exe
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor.exe
 
 - From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine.exe to playtest the scene!
+
+---
+
+## Setup (For MacOS)
+
+- Install XCode Command Line Tools: xcode-select --
+
+- Install Homebrew https://brew.sh/
+
+- Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/ or brew install cmake
+
+- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or brew install wxwidgets
+
+- Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
+
+- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with Metal on MacOS if you do not install this) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/ or use brew install molten-vk (though the official SDK from LunarG is preferable for development headers if you ever want to modify vulkan shaders). Apple does not natively support Vulkan. To use Vulkan, you need MoltenVK, which translates Vulkan calls to Metal.
+
+- Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere, though this should only matter on Windows)
+
+- Download the Engine_Build_Unix.sh in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
+
+- Run the Engine_Build_Unix.sh file
+
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor
+
+- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
+
+---
+
+## Setup (For Linux)
+
+- sudo apt update
+
+- sudo apt install build-essential git
+
+- Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/ or sudo apt install cmake
+
+- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or sudo apt install libwxgtk3.0-gtk3-dev
+
+- Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
+
+- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/ or use sudo apt install libvulkan-dev vulkan-tools
+
+- Install X11 and OpenGL Headers: sudo apt install libx11-dev libxrandr-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev (Note: If you have an NVIDIA GPU, ensure your proprietary drivers are installed via "Additional Drivers" settings)
+
+- Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere, though this should only matter on Windows)
+
+- Download the Engine_Build_Unix.sh in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
+
+- Run the Engine_Build_Unix.sh file
+
+- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor
+
+- From here you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
 
 ---
 
