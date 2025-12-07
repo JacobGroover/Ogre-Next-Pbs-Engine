@@ -3,10 +3,14 @@
 SETLOCAL
 
 set ENGINE_BRANCH_NAME=main
+set OGRE_NEXT_DEPS_REPO=https://github.com/JacobGroover/ogre-next-deps.git
+set OGRE_NEXT_REPO=https://github.com/JacobGroover/ogre-next.git
 set OGRE_BRANCH_NAME=master
+
 set GENERATOR="Visual Studio 17 2022"
 set PLATFORM=x64
 
+echo CHECK FOR CMAKE
 set CMAKE_BIN_x86="C:\Program Files (x86)\CMake\bin\cmake.exe"
 set CMAKE_BIN_x64="C:\Program Files\CMake\bin\cmake.exe"
 IF EXIST %CMAKE_BIN_x64% (
@@ -19,10 +23,40 @@ IF EXIST %CMAKE_BIN_x64% (
 	) ELSE (
 		echo Cannot detect either %CMAKE_BIN_x86% or
 		echo %CMAKE_BIN_x64% make sure CMake is installed
+		pause
 		EXIT /B 1
 	)
 )
 echo Using CMake at %CMAKE_BIN%
+
+echo CHECK FOR VULKAN SDK
+IF NOT DEFINED VULKAN_SDK (
+	echo [WARNING] VULKAN_SDK environment variable not found.
+	echo Ogre-Next will likely skip building the Vulkan RenderSystem.
+	echo Press any key to continue without Vulkan.
+	pause
+) ELSE (
+	echo Vulkan SDK detected at %VULKAN_SDK%
+)
+
+echo CHECK FOR WXWIDGETS
+IF DEFINED WXWIDGETS_ROOT (
+	set "WDWIDGETS_PATH=%WXWIDGETS_ROOT%"
+	echo wxWidgets detected via Environment Variable at: %WXWIDGETS_ROOT%
+) ELSE (
+	set "WXWIDGETS_PATH=C:\wxWidgets"
+)
+
+IF NOT EXIST "%WXWIDGETS_PATH%" (
+	echo.
+	echo [ERROR] wxWidgets not found at: %WXWIDGETS_PATH%
+	echo The Editor requires wxWidgets.
+	echo 1. Install wxWidgets to C:\wxWidgets
+	echo 2. OR set WXWIDGETS_ROOT env var.
+	echo.
+	pause
+	EXIT /B 1
+)
 
 IF NOT EXIST Engine (
 	mkdir Engine
@@ -88,7 +122,9 @@ echo --- Building Engine ---
 %CMAKE_BIN% --build . --target install --config Release
 
 
-echo It is finished.
-
+echo.
+echo ===================================
+echo Build Complete.
+echo ===================================
 ENDLOCAL
 pause
