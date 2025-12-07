@@ -144,5 +144,7 @@ if( APPLE )
 endif()
 
 # Merge custom Media assets into the build's Data folder
-file( COPY "${CMAKE_CURRENT_SOURCE_DIR}/Media/" 
-      DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bin/Data" )
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Media/")
+    file( COPY "${CMAKE_CURRENT_SOURCE_DIR}/Media/" 
+          DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bin/Data" )
+endif()
