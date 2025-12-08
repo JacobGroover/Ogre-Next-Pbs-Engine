@@ -60,11 +60,20 @@ It provides a modular framework for rendering, input, and game state management,
 
 - sudo apt install build-essential git
 
-- Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/ or sudo apt install cmake
+- Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/ or:
+    - sudo apt install build-essential libssl-dev
+    - wget https://github.com/Kitware/CMake/releases/download/v3.29.3/cmake-3.29.3.tar.gz
+    - tar -xf cmake-3.29.3.tar.gz
+    - cd cmake-3.29.3
+    - ./bootstrap
+    - make
+    - sudo make install
 
-- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or sudo apt install libwxgtk3.0-gtk3-dev
+- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or sudo apt install libwxgtk3.2-dev
 
-- Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
+- Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions) or: 
+    - sudo add-apt-repository ppa:deadsnakes/ppa
+    - sudo apt install python3.11
 
 - (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/ or use sudo apt install libvulkan-dev vulkan-tools
 

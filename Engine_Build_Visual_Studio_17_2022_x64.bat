@@ -2,7 +2,7 @@
 @echo off
 SETLOCAL
 
-set ENGINE_BRANCH_NAME=main
+set ENGINE_REPO=https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git
 set OGRE_NEXT_DEPS_REPO=https://github.com/JacobGroover/ogre-next-deps.git
 set OGRE_NEXT_REPO=https://github.com/JacobGroover/ogre-next.git
 set OGRE_BRANCH_NAME=master
@@ -61,7 +61,7 @@ IF NOT EXIST "%WXWIDGETS_PATH%" (
 IF NOT EXIST Engine (
 	mkdir Engine
 	echo --- Cloning Engine ---
-	call git clone --recurse-submodules --shallow-submodules https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git
+	call git clone --recurse-submodules --shallow-submodules %ENGINE_REPO%
 ) ELSE (
 	echo --- Engine repo detected. Cloning skipped ---
 )
@@ -70,7 +70,7 @@ cd Engine/Dependencies/Ogre
 IF NOT EXIST ogre-next-deps (
 	mkdir ogre-next-deps
 	echo --- Cloning ogre-next-deps ---
-	call git clone --recurse-submodules --shallow-submodules https://github.com/JacobGroover/ogre-next-deps.git
+	call git clone --recurse-submodules --shallow-submodules %OGRE_NEXT_DEPS_REPO%
 ) ELSE (
 	echo --- ogre-next-deps repo detected. Cloning skipped ---
 )
@@ -88,7 +88,7 @@ echo --- Building ogre-next-deps ---
 cd ../../
 IF NOT EXIST ogre-next (
 	echo --- Cloning Ogre master ---
-	call git clone --branch %OGRE_BRANCH_NAME% https://github.com/JacobGroover/ogre-next.git
+	call git clone --branch %OGRE_BRANCH_NAME% %OGRE_NEXT_REPO%
 )
 cd ogre-next
 IF NOT EXIST Dependencies (

@@ -7,189 +7,201 @@ set -e
 OS_NAME=$(uname -s)
 ARCH=$(uname -m)
 
-# Detect CPU Cores for parallel build
 if [ "$OS_NAME" = "Darwin" ]; then
-    # macOS command
     CORES=$(sysctl -n hw.logicalcpu)
     echo "Detected macOS ($ARCH) with $CORES cores."
 else
-    # Linux command
     CORES=$(nproc)
     echo "Detected Linux ($ARCH) with $CORES cores."
 fi
 
 # ==========================================
-# Configuration
+# Repos / Branches
 # ==========================================
-ENGINE_BRANCH_NAME="main"
+ENGINE_REPO="https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git"
 OGRE_NEXT_DEPS_REPO="https://github.com/JacobGroover/ogre-next-deps.git"
 OGRE_NEXT_REPO="https://github.com/JacobGroover/ogre-next.git"
-OGRE_BRANCH_NAME="master"
+
+ENGINE_BRANCH="main"
+OGRE_BRANCH="master"
 
 # ==========================================
-# Check for CMake
+# Check CMake
 # ==========================================
 echo "CHECK FOR CMAKE"
-if ! command -v cmake &> /dev/null; then
-    echo "CMake not found. Please install CMake."
+if ! command -v cmake >/dev/null 2>&1; then
+    echo "CMake not found. Install it and re-run."
     exit 1
 fi
-echo "CMake detected at $(command -v cmake)"
+
+echo "CMake detected: $(command -v cmake)"
+
+# Detect whether generator is multi-config
+GEN=$(cmake -G "" -LA 2>/dev/null | grep "CMAKE_GENERATOR" || true)
+MULTI_CONFIG=0
+
+case "$GEN" in
+    *"Xcode"*|*"Visual Studio"*|*"Multi-Config"*)
+        MULTI_CONFIG=1
+        ;;
+esac
 
 # ==========================================
-# Check for Vulkan
+# Vulkan Check
 # ==========================================
-echo "CHECK FOR VULKAN SDK"
-if [ -z "$VULKAN_SDK" ]; then
-    echo "[WARNING] VULKAN_SDK environment variable not found."
-    
-    # OS-Specific check for system libraries
-    FOUND_VULKAN=0
+echo "CHECK FOR VULKAN"
+FOUND_VULKAN=0
+
+if [ -n "$VULKAN_SDK" ]; then
+    echo "Vulkan SDK detected at $VULKAN_SDK"
+    FOUND_VULKAN=1
+else
     if [ "$OS_NAME" = "Linux" ]; then
-        if ldconfig -p 2>/dev/null | grep -q libvulkan; then
+        if ldconfig -p 2>/dev/null | grep -q "libvulkan"; then
             FOUND_VULKAN=1
         fi
     elif [ "$OS_NAME" = "Darwin" ]; then
-        # On macOS, check common homebrew or framework locations
-        if [ -f "/usr/local/lib/libvulkan.dylib" ] || [ -f "/opt/homebrew/lib/libvulkan.dylib" ]; then
+        # MoltenVK locations
+        if [ -f "/usr/local/lib/libMoltenVK.dylib" ] || \
+           [ -f "/opt/homebrew/lib/libMoltenVK.dylib" ]; then
             FOUND_VULKAN=1
         fi
     fi
+fi
 
-    if [ $FOUND_VULKAN -eq 1 ]; then
-        echo "Vulkan library found in system paths."
-    else
-        echo "Ogre-Next will likely skip building the Vulkan RenderSystem."
-        # Use simple read for compatibility
-        echo "Press ENTER to continue without Vulkan..."
-        read ignore
-    fi
-else
-    echo "Vulkan SDK detected at $VULKAN_SDK"
+if [ $FOUND_VULKAN -eq 0 ]; then
+    echo "[WARNING] Vulkan not detected. Ogre-Next Vulkan RS will be skipped."
+    echo "Press ENTER to continue..."
+    read _
 fi
 
 # ==========================================
-# Check for wxWidgets
+# wxWidgets Check
 # ==========================================
 echo "CHECK FOR WXWIDGETS"
 if [ -n "$WXWIDGETS_ROOT" ]; then
-    echo "wxWidgets detected via Environment Variable at: $WXWIDGETS_ROOT"
-elif command -v wx-config &> /dev/null; then
-    echo "wxWidgets detected via wx-config at: $(command -v wx-config)"
+    echo "wxWidgets detected at: $WXWIDGETS_ROOT"
+elif command -v wx-config >/dev/null 2>&1; then
+    echo "wxWidgets detected via wx-config: $(command -v wx-config)"
 else
-    echo ""
     echo "[ERROR] wxWidgets not found."
-    echo "The Editor requires wxWidgets."
-    echo "  - Linux: sudo apt install libwxgtk3.0-gtk3-dev"
-    echo "  - macOS: brew install wxwidgets"
-    echo ""
     exit 1
 fi
 
 # ==========================================
-# Engine Setup
+# Clone Engine
 # ==========================================
 if [ ! -d "Engine" ]; then
-    mkdir -p Engine
     echo "--- Cloning Engine ---"
-    git clone --recurse-submodules --shallow-submodules https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git Engine
+    git clone --recurse-submodules --shallow-submodules "$ENGINE_REPO" Engine
 else
-    echo "--- Engine repo detected. Cloning skipped ---"
+    echo "--- Engine already exists ---"
 fi
 
-cd Engine/Dependencies/Ogre
+pushd Engine/Dependencies/Ogre >/dev/null
 
 # ==========================================
-# Ogre-Next-Deps Setup & Build
+# Clone ogre-next-deps
 # ==========================================
 if [ ! -d "ogre-next-deps" ]; then
-    mkdir -p ogre-next-deps
     echo "--- Cloning ogre-next-deps ---"
-    git clone --recurse-submodules --shallow-submodules $OGRE_NEXT_DEPS_REPO ogre-next-deps
+    git clone --recurse-submodules --shallow-submodules "$OGRE_NEXT_DEPS_REPO" ogre-next-deps
 else
-    echo "--- ogre-next-deps repo detected. Cloning skipped ---"
+    echo "--- ogre-next-deps already exists ---"
 fi
 
-cd ogre-next-deps
-mkdir -p build
-cd build
+# ==========================================
+# Build ogre-next-deps (Debug + Release)
+# ==========================================
+pushd ogre-next-deps >/dev/null
 
-echo "--- Building ogre-next-deps ---"
+for CONFIG in Debug Release; do
+    mkdir -p "build-$CONFIG"
+    pushd "build-$CONFIG" >/dev/null
 
-# Build Debug
-echo "--- Configuring & Building Deps (Debug) ---"
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="./ogredeps" ..
-cmake --build . --config Debug -- -j$CORES
-cmake --build . --target install --config Debug
+    echo "--- Building ogre-next-deps ($CONFIG) ---"
 
-# Build Release
-echo "--- Configuring & Building Deps (Release) ---"
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="./ogredeps" ..
-cmake --build . --config Release -- -j$CORES
-cmake --build . --target install --config Release
+    cmake -DCMAKE_BUILD_TYPE=$CONFIG \
+          -DCMAKE_INSTALL_PREFIX="./ogredeps-$CONFIG" \
+          ..
 
-cd ../../
+    if [ $MULTI_CONFIG -eq 1 ]; then
+        cmake --build . --config $CONFIG -- -j$CORES
+        cmake --build . --target install --config $CONFIG
+    else
+        cmake --build . -- -j$CORES
+        cmake --install .
+    fi
+
+    popd >/dev/null
+done
+
+popd >/dev/null
 
 # ==========================================
-# Ogre-Next Setup & Build
+# Clone Ogre-Next
 # ==========================================
 if [ ! -d "ogre-next" ]; then
-    echo "--- Cloning Ogre master ---"
-    git clone --branch $OGRE_BRANCH_NAME $OGRE_NEXT_REPO ogre-next
+    echo "--- Cloning Ogre-Next master ---"
+    git clone --branch "$OGRE_BRANCH" "$OGRE_NEXT_REPO" ogre-next
 fi
 
-cd ogre-next
+pushd ogre-next >/dev/null
 
-# Create Symlink
+# Symlink Dependencies → choose Debug by default
 if [ ! -e "Dependencies" ]; then
-    echo "Creating Dependencies symlink..."
-    ln -s ../ogre-next-deps/build/ogredeps Dependencies
+    ln -s ../ogre-next-deps/build-Debug/ogredeps-Debug Dependencies
 fi
 
-mkdir -p build
-cd build
-echo "--- Running CMake configure for Ogre ---"
+# ==========================================
+# Build Ogre (Debug + Release)
+# ==========================================
+for CONFIG in Debug Release; do
+    mkdir -p "build-$CONFIG"
+    pushd "build-$CONFIG" >/dev/null
 
-# Build Debug
-echo "--- Building Ogre (Debug) ---"
-cmake -DOGRE_DEPENDENCIES_DIR=../../ogre-next-deps/build/ogredeps \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DOGRE_BUILD_COMPONENT_SCENE_FORMAT=1 \
-      -DOGRE_BUILD_SAMPLES2=1 \
-      -DOGRE_BUILD_TESTS=1 \
-      ..
-cmake --build . --config Debug -- -j$CORES
-cmake --build . --target install --config Debug
+    echo "--- Building Ogre ($CONFIG) ---"
 
-# Build Release
-echo "--- Building Ogre (Release) ---"
-cmake -DOGRE_DEPENDENCIES_DIR=../../ogre-next-deps/build/ogredeps \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DOGRE_BUILD_COMPONENT_SCENE_FORMAT=1 \
-      -DOGRE_BUILD_SAMPLES2=1 \
-      -DOGRE_BUILD_TESTS=1 \
-      ..
-cmake --build . --config Release -- -j$CORES
-cmake --build . --target install --config Release
+    cmake -DCMAKE_BUILD_TYPE=$CONFIG \
+          -DOGRE_BUILD_COMPONENT_SCENE_FORMAT=1 \
+          -DOGRE_BUILD_SAMPLES2=1 \
+          -DOGRE_BUILD_TESTS=1 \
+          -DOGRE_DEPENDENCIES_DIR="../../ogre-next-deps/build-$CONFIG/ogredeps-$CONFIG" \
+          ..
 
-cd ../../../../
+    if [ $MULTI_CONFIG -eq 1 ]; then
+        cmake --build . --config $CONFIG -- -j$CORES
+        cmake --build . --target install --config $CONFIG
+    else
+        cmake --build . -- -j$CORES
+        cmake --install .
+    fi
+
+    popd >/dev/null
+done
+
+popd >/dev/null  # ogre-next
+popd >/dev/null  # Ogre/
 
 # ==========================================
-# Engine Build
+# Build Engine
 # ==========================================
+pushd Engine >/dev/null
 mkdir -p build
-cd build
-echo "--- Building Engine ---"
+pushd build >/dev/null
 
-# Build Debug
-echo "--- Building Engine (Debug) ---"
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-cmake --build . --config Debug -- -j$CORES
+for CONFIG in Debug Release; do
+    echo "--- Building Engine ($CONFIG) ---"
+    cmake -DCMAKE_BUILD_TYPE=$CONFIG ..
+    if [ $MULTI_CONFIG -eq 1 ]; then
+        cmake --build . --config $CONFIG -- -j$CORES
+    else
+        cmake --build . -- -j$CORES
+    fi
+done
 
-# Build Release
-echo "--- Building Engine (Release) ---"
-cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . --config Release -- -j$CORES
+popd >/dev/null
+popd >/dev/null
 
 echo ""
 echo "==================================="
