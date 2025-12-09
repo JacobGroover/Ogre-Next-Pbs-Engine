@@ -647,8 +647,9 @@ namespace Demo
                 "WASD  : Move Camera\n"
                 "Shift : Speed Boost (while holding down)\n"
                 "Mouse : Look Around\n"
-                "Q     : Toggle Spin on all objects (cubes and spheres, not lights or cameras)\n";
-                "ESC   : Exit Application";
+                "Q     : Toggle Spin on visible objects\n";
+			outText +=
+                "ESC   : Exit Application\n";
             outText += "\n\nPress F1 to toggle help/stats\n\n";
                 /*"\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
                 "Ctrl+F2 reloads Unlit shaders.\n"
