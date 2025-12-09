@@ -18,6 +18,10 @@ fi
 # ==========================================
 # Repos / Branches
 # ==========================================
+#ENGINE_REPO="https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git"
+#OGRE_NEXT_DEPS_REPO="https://github.com/JacobGroover/ogre-next-deps.git"
+#OGRE_NEXT_REPO="https://github.com/JacobGroover/ogre-next.git"
+
 ENGINE_REPO="https://github.com/JacobGroover/Ogre-Next-Pbs-Engine.git"
 OGRE_NEXT_DEPS_REPO="https://github.com/JacobGroover/ogre-next-deps.git"
 OGRE_NEXT_REPO="https://github.com/JacobGroover/ogre-next.git"
@@ -148,26 +152,36 @@ fi
 
 pushd ogre-next >/dev/null
 
-# Symlink Dependencies → choose Debug by default
-if [ ! -e "Dependencies" ]; then
-    ln -s ../ogre-next-deps/build-Debug/ogredeps-Debug Dependencies
-fi
+# ==========================================
+# Build Ogre-Next (Debug + Release)
+# ==========================================
+mkdir -p build
 
-# ==========================================
-# Build Ogre (Debug + Release)
-# ==========================================
 for CONFIG in Debug Release; do
-    mkdir -p "build-$CONFIG"
-    pushd "build-$CONFIG" >/dev/null
+    # FIX 1: Update the Dependencies symlink for the current CONFIG
+    # This ensures Release builds link against Release deps, and Debug against Debug deps.
+    rm -f Dependencies
+    if [ "$CONFIG" = "Debug" ]; then
+        ln -s ../ogre-next-deps/build-Debug/ogredeps-Debug Dependencies
+    else
+        ln -s ../ogre-next-deps/build-Release/ogredeps-Release Dependencies
+    fi
 
-    echo "--- Building Ogre ($CONFIG) ---"
+    # Create build directory
+    mkdir -p "build/$CONFIG"
+    pushd "build/$CONFIG" >/dev/null
 
+    echo "--- Building Ogre-Next ($CONFIG) ---"
+
+    # FIX 2: Install to './sdk' to avoid file locking, then copy back.
+    # We use 'cp -a' to preserve symlinks (critical for shared libraries on Linux).
     cmake -DCMAKE_BUILD_TYPE=$CONFIG \
           -DOGRE_BUILD_COMPONENT_SCENE_FORMAT=1 \
           -DOGRE_BUILD_SAMPLES2=1 \
           -DOGRE_BUILD_TESTS=1 \
-          -DOGRE_DEPENDENCIES_DIR="../../ogre-next-deps/build-$CONFIG/ogredeps-$CONFIG" \
-          ..
+          -DOGRE_DEPENDENCIES_DIR="../../../ogre-next-deps/build-$CONFIG/ogredeps-$CONFIG" \
+          -DCMAKE_INSTALL_PREFIX="./sdk" \
+          ../../
 
     if [ $MULTI_CONFIG -eq 1 ]; then
         cmake --build . --config $CONFIG -- -j$CORES
@@ -176,32 +190,54 @@ for CONFIG in Debug Release; do
         cmake --build . -- -j$CORES
         cmake --install .
     fi
+    
+    echo "--- Adjusting header/lib layout for Engine ($CONFIG) ---"
+    
+    # 1. Copy headers
+    if [ -d "sdk/include/OGRE-Next" ]; then
+        mkdir -p include
+        cp -a sdk/include/OGRE-Next/* include/
+    fi
+    
+    # 2. Copy libraries (libs) to the folder Engine expects
+    if [ -d "sdk/lib" ]; then
+         mkdir -p lib
+         cp -a sdk/lib/* lib/
+    fi
 
-    popd >/dev/null
+    # 3. Cleanup temp sdk folder
+    rm -rf sdk
+
+    popd >/dev/null # Exit build/$CONFIG
 done
 
-popd >/dev/null  # ogre-next
-popd >/dev/null  # Ogre/
+popd >/dev/null  # Exit ogre-next
+popd >/dev/null  # Exit Dependencies/Ogre
 
 # ==========================================
 # Build Engine
 # ==========================================
 pushd Engine >/dev/null
 mkdir -p build
-pushd build >/dev/null
 
 for CONFIG in Debug Release; do
     echo "--- Building Engine ($CONFIG) ---"
-    cmake -DCMAKE_BUILD_TYPE=$CONFIG ..
+    
+    # Create separate build folders for each config to prevent
+    # CMakeCache.txt variable collision (specifically OGRE_BINARIES)
+    mkdir -p "build/$CONFIG"
+    pushd "build/$CONFIG" >/dev/null
+
+    cmake -DCMAKE_BUILD_TYPE=$CONFIG ../../
+    
     if [ $MULTI_CONFIG -eq 1 ]; then
         cmake --build . --config $CONFIG -- -j$CORES
     else
         cmake --build . -- -j$CORES
     fi
+    
+    popd >/dev/null # Exit build/$CONFIG
 done
-
-popd >/dev/null
-popd >/dev/null
 
 echo ""
 echo "==================================="
