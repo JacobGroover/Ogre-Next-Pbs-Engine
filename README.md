@@ -79,6 +79,11 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Install X11 and OpenGL Headers: sudo apt install libx11-dev libxrandr-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev (Note: If you have an NVIDIA GPU, ensure your proprietary drivers are installed via "Additional Drivers" settings)
 
+- Install X11 Athena Widget Set (Xaw) headers for Linux windowing implementation dependencies and pkg-config: sudo apt install libxaw7-dev libxt-dev libx11-xcb-dev pkg-config
+    - sudo apt update
+
+- Install SDL2 (for window creation and mouse/keyboard input) and XCB RandR headers (to allow Vulkan to communicate with X11 to resize/rotate screen resolution & detect monitor changes): sudo apt install libsdl2-dev libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
 - Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere, though this should only matter on Windows)
 
 - Download the Engine_Build_Unix.sh in the root directory on this GitHub page and place it at the root directory where you want the Engine directory to be created
