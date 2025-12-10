@@ -8,6 +8,8 @@ It provides a modular framework for rendering, input, and game state management,
 
 ## Setup (For Windows)
 
+- Install Visual Studio 17 2022 (or current version)
+
 - Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/
 
 - Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ (Anywhere you set the environment variable should work after it is installed, but the project expects it to be installed directly in the default location at C:\wxWidgets)
