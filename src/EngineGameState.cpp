@@ -33,6 +33,8 @@
 #include "OgreArchiveManager.h"
 #include "OgreFileSystemLayer.h"
 #include <fstream>
+#include <vector>
+#include "OgreString.h"
 #include "OgreResourceGroupManager.h"
 #include "OgreStreamSerialiser.h"
 
@@ -301,25 +303,55 @@ namespace Demo
             return;
         }
 
-        // --- Register Project Path as Resource Location ---
-        // This ensures textures referenced in the JSON can be found by Ogre
-        if (document.HasMember("path") && document["path"].IsString()) {
-            std::string projectPath = document["path"].GetString();
-            if (!projectPath.empty()) {
-                Ogre::ResourceGroupManager& rgm = Ogre::ResourceGroupManager::getSingleton();
-                Ogre::String groupName = Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME;
+        // --- Register Scene Resource Locations ---
+        // Textures are referenced by bare filename, so whichever directory holds
+        // them has to be on Ogre's search path. Resources.cfg adds Data without
+        // recursing, so a project subdirectory under it is not covered.
+        //
+        // The scene file's own directory is the dependable source for this,
+        // because it travels with the project. The "path" field is written by the
+        // editor as an absolute path on the authoring machine, so it is only
+        // usable when that directory still exists here.
+        {
+            Ogre::ResourceGroupManager& rgm = Ogre::ResourceGroupManager::getSingleton();
+            const Ogre::String groupName = Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME;
 
-                // Add the location
-                rgm.addResourceLocation(projectPath, "FileSystem", groupName);
-                Ogre::LogManager::getSingleton().logMessage("Registered project resource path: " + projectPath);
+            std::vector<Ogre::String> searchPaths;
 
-                // FIX: Check if initialized to avoid runtime crash, and provide the missing boolean argument
-                if (!rgm.isResourceGroupInitialised(groupName)) {
-                    rgm.initialiseResourceGroup(groupName, true);
-                }
-                // Note: If the group is already initialized, addResourceLocation still allows 
-                // textures to be found immediately, so no else/re-init is required for textures.
+            Ogre::String sceneBasename, sceneDir;
+            Ogre::StringUtil::splitFilename(filename, sceneBasename, sceneDir);
+            if (!sceneDir.empty()) {
+                searchPaths.push_back(sceneDir);
             }
+
+            if (document.HasMember("path") && document["path"].IsString()) {
+                Ogre::String projectPath = document["path"].GetString();
+                if (!projectPath.empty() && projectPath != sceneDir) {
+                    searchPaths.push_back(projectPath);
+                }
+            }
+
+            for (const Ogre::String& searchPath : searchPaths) {
+                // A location may be missing on this machine, or already registered
+                // by an earlier load. Neither is a reason to abandon the scene.
+                try {
+                    rgm.addResourceLocation(searchPath, "FileSystem", groupName);
+                    Ogre::LogManager::getSingleton().logMessage(
+                        "Registered resource path: " + searchPath);
+                }
+                catch (Ogre::Exception& e) {
+                    Ogre::LogManager::getSingleton().logMessage(
+                        "Skipped resource path '" + searchPath + "': " + e.getDescription(),
+                        Ogre::LML_NORMAL);
+                }
+            }
+
+            // Check if initialized to avoid runtime crash, and provide the missing boolean argument.
+            if (!rgm.isResourceGroupInitialised(groupName)) {
+                rgm.initialiseResourceGroup(groupName, true);
+            }
+            // Note: If the group is already initialized, addResourceLocation still allows
+            // textures to be found immediately, so no else/re-init is required for textures.
         }
 
         // --- Process Resources (Materials) ---

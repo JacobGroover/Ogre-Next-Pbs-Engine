@@ -79,18 +79,6 @@ if [ $FOUND_VULKAN -eq 0 ]; then
     read _
 fi
 
-# ==========================================
-# wxWidgets Check
-# ==========================================
-echo "CHECK FOR WXWIDGETS"
-if [ -n "$WXWIDGETS_ROOT" ]; then
-    echo "wxWidgets detected at: $WXWIDGETS_ROOT"
-elif command -v wx-config >/dev/null 2>&1; then
-    echo "wxWidgets detected via wx-config: $(command -v wx-config)"
-else
-    echo "[ERROR] wxWidgets not found."
-    exit 1
-fi
 
 # ==========================================
 # Clone Engine

@@ -39,29 +39,11 @@ IF NOT DEFINED VULKAN_SDK (
 	echo Vulkan SDK detected at %VULKAN_SDK%
 )
 
-echo CHECK FOR WXWIDGETS
-IF DEFINED WXWIDGETS_ROOT (
-	set "WDWIDGETS_PATH=%WXWIDGETS_ROOT%"
-	echo wxWidgets detected via Environment Variable at: %WXWIDGETS_ROOT%
-) ELSE (
-	set "WXWIDGETS_PATH=C:\wxWidgets"
-)
-
-IF NOT EXIST "%WXWIDGETS_PATH%" (
-	echo.
-	echo [ERROR] wxWidgets not found at: %WXWIDGETS_PATH%
-	echo The Editor requires wxWidgets.
-	echo 1. Install wxWidgets to C:\wxWidgets
-	echo 2. OR set WXWIDGETS_ROOT env var.
-	echo.
-	pause
-	EXIT /B 1
-)
 
 IF NOT EXIST Engine (
 	mkdir Engine
 	echo --- Cloning Engine ---
-	call git clone --recurse-submodules --shallow-submodules %ENGINE_REPO%
+	call git clone --recurse-submodules --shallow-submodules %ENGINE_REPO% Engine
 ) ELSE (
 	echo --- Engine repo detected. Cloning skipped ---
 )
