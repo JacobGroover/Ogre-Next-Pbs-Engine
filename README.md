@@ -1,22 +1,103 @@
+# Ogre-Next-Pbs-Engine
 
-# Engine
+A custom 3D rendering engine built on [Ogre-Next](https://github.com/OGRECave/ogre-next),
+with an EnTT entity component system, a JSON scene format, and an ambient
+occlusion texture slot added to Ogre-Next's PBS material system.
 
-Engine is a custom game engine built on top of [Ogre-next](https://github.com/OGRECave/ogre-next).  
-It provides a modular framework for rendering, input, and game state management, with a focus on clarity and extensibility.
+Developed September to December 2025 as a capstone project.
+
+![Without ambient occlusion](docs/images/AO_Diff1.png)
+![With ambient occlusion](docs/images/AO_Diff2.png)
+
+The same scene without and with the ambient occlusion map applied. Ogre-Next's
+PBS material system has no AO texture slot, so adding one meant working inside
+HLMS, its runtime shader generator. That work lives in a
+[fork of Ogre-Next](https://github.com/JacobGroover/ogre-next) and is written up
+in [docs/ambient-occlusion.md](docs/ambient-occlusion.md), including the enum
+width bug and the const buffer offset bug it surfaced.
 
 ---
 
-## Setup (For Windows)
+## What is here
+
+- **Ambient occlusion in HLMS PBS.** A new `PBSM_AO` texture slot threaded
+  through the texture type enum, the datablock, the GPU const buffer upload,
+  and the generated shader pieces. About 215 lines across 12 files in the
+  Ogre-Next fork. See [docs/ambient-occlusion.md](docs/ambient-occlusion.md).
+- **EnTT entity component system.** Scene entities are EnTT registry entries
+  carrying `TransformComponent`, `SceneNodeComponent` and renderable or light
+  components, with a render sync step pushing transforms to Ogre scene nodes.
+- **JSON scene format.** Scenes, materials and texture resources are described
+  in a single JSON document and deserialized at startup, including full PBR
+  material setup (albedo, normal, roughness, metallic, AO, and packed ORM).
+- **Cross platform build.** One build script per platform bootstraps the
+  dependency tree, builds Ogre-Next and its dependencies, and then the engine.
+  D3D11, OpenGL 3+, Vulkan and Metal render systems.
+
+## Architecture
+
+```
+src/Engine.cpp             entry point, graphics system and resource setup
+src/EngineGameState.cpp    scene loading, JSON deserialization, ECS wiring
+include/Components/        EnTT components (Transform, OgreRenderable, Spin)
+src/OgreCommon/            Ogre-Next sample framework (upstream, unmodified)
+CMake/                     dependency and template configuration
+Media/SampleProject/       sample scene, PBR textures, AO comparison renders
+docs/                      ambient occlusion writeup, Ogre-Next build options
+```
+
+The engine loads a scene by parsing its JSON document in two passes: first
+mapping texture resource names to files, then building `HlmsPbsDatablock`
+materials from those maps, then walking the node tree to create EnTT entities
+and their matching Ogre scene nodes. Node types dispatch to items, lights or
+cameras.
+
+## Scene format
+
+A scene is one JSON document holding a node tree and a resource list. Nodes
+carry a transform and a type; materials reference textures by resource name
+rather than by path, so the same scene can be retargeted without rewriting node
+data.
+
+```json
+{
+  "nodes": [
+    { "type": "SceneNode", "name": "Scene", "uid": 1, "ambientLight": 0.5 },
+    { "type": "LightNode", "name": "Light", "uid": 2, "parent": 1,
+      "lightType": 1, "intensity": 1.0, "rotationX": -60.0, "rotationY": -75.0 },
+    { "type": "PrimitiveNode", "name": "Primitive", "uid": 4, "parent": 1,
+      "material": "res://Material.7", "meshType": 0, "positionX": 15.0 }
+  ],
+  "resources": [
+    { "type": "MaterialResource", "name": "Material.7", "uid": 7,
+      "albedoTexture": "Texture.8", "ambientOcclusionMap": "Texture.9",
+      "normalMap": "Texture.10", "roughnessMap": "Texture.11" },
+    { "type": "TextureResource", "name": "Texture.9", "uid": 9,
+      "path": "A23DTEX_Ambient_Occlusion.jpg" }
+  ]
+}
+```
+
+Pass a scene with `--scene <path>`. With no argument the engine loads
+`Media/SampleProject`.
+
+---
+
+## Building
+
+The build scripts clone the engine and its dependencies, build Ogre-Next, and
+then build the engine. Expect a long first build, since Ogre-Next is compiled
+from source.
+
+### Windows
 
 - Install Visual Studio 17 2022 (or current version)
 
 - Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/
 
-- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ (Anywhere you set the environment variable should work after it is installed, but the project expects it to be installed directly in the default location at C:\wxWidgets)
-
 - Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
 
-- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with D3D11 and/or OpenGL 3+ on Windows if you do not install this) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/ 
+- (OPTIONAL: To allow the option to run the rendering engine using the Vulkan RenderSystem. You will still be able to run it with D3D11 and/or OpenGL 3+ on Windows if you do not install this) Install Vulkan SDK from the LunarG website https://vulkan.lunarg.com/
 
 - Navigate to the root directory of a drive (close to root helps with shaderc file path length limitations later, good results cannot be guaranteed if you place the project elsewhere)
 
@@ -24,21 +105,15 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Visual_Studio_17_2022_x64.bat file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor.exe to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine.exe directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
+- After the project is done downloading and building, navigate to `...\Engine\bin\Debug` and run `Engine.exe` to load the sample scene.
 
-- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine.exe to playtest the scene!
-
----
-
-## Setup (For MacOS)
+### MacOS
 
 - Install XCode Command Line Tools: xcode-select --
 
 - Install Homebrew https://brew.sh/
 
 - Install CMake (preferably with CMake-GUI) Version 3.29.3 from https://cmake.org/files/v3.29/ or brew install cmake
-
-- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or brew install wxwidgets
 
 - Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (or use chocolatey or whatever method you prefer, but newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions)
 
@@ -50,13 +125,9 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Unix.sh file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
+- After the project is done downloading and building, navigate to `.../Engine/bin/Debug` and run `Engine` to load the sample scene.
 
-- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
-
----
-
-## Setup (For Linux)
+### Linux
 
 - sudo apt update
 
@@ -70,8 +141,6 @@ It provides a modular framework for rendering, input, and game state management,
     - ./bootstrap
     - make
     - sudo make install
-
-- Install wxWidgets Version 3.2.8 from https://wxwidgets.org/downloads/ or sudo apt install libwxgtk3.2-dev
 
 - Install python 3.11 (For shaderc needed to compile shaders for ogre-next engine and for ogre-next scripts if you want to play around with them) https://www.python.org/downloads/ (newer than 3.11 is not recommended, as some packages may have additional dependency issues with later versions) or: 
     - sudo add-apt-repository ppa:deadsnakes/ppa
@@ -92,132 +161,22 @@ It provides a modular framework for rendering, input, and game state management,
 
 - Run the Engine_Build_Unix.sh file
 
-- After the project is done downloading and building, navigate to ...\Engine\bin\Debug and run editor to make your own scene or to create an editor project out of the SampleProject located at Engine\Media\SampleProject. You can also run Engine directly if you want to just immediately see the sample project scene. (NOTE: When looking at the SampleProject in the editor, removing the Albedo/Diffuse texture from the material and leaving the rest of the textures will make it much easier to notice the Ambient Occlusion feature that was implemented, especially when then toggling the Ambient Occlusion texture on/off and trying the Playtest button again. The AO_Diff1.png - AO_Diff4.png files in SampleProject show the scene with Ambient Occlusion removed, then added, then a albedo/diffuse pixel color difference mapping showing only the differences between the two images resulting from ambient occlusion, and then another difference mapping in grayscale with the differences magnified to contrast the areas where Ambient Occlusion effects were more pronounced on the material)
-
-- From the editor you can create a scene or use the prebuilt scene, and click Playtest to launch the Engine to playtest the scene!
+- After the project is done downloading and building, navigate to `.../Engine/bin/Debug` and run `Engine` to load the sample scene.
 
 ---
 
-### \Samples
+## Dependencies
 
-If you want to look at some samples, there are .exe files in **E:\Engine\Dependencies\Ogre\ogre-next\build\bin\debug** and their related c++ files are located in the various subfolders under **E:\Engine\Dependencies\Ogre\ogre-next\Samples**.
+| Dependency | Role |
+|---|---|
+| [Ogre-Next](https://github.com/JacobGroover/ogre-next) | Rendering. Forked to add the AO texture slot to HLMS PBS. |
+| [ogre-next-deps](https://github.com/JacobGroover/ogre-next-deps) | Ogre-Next's own dependency bundle. |
+| [EnTT](https://github.com/skypjack/entt) | Entity component system. |
 
----
+## Notes
 
-### \Config
-Configuration files and templates:
-- `resources2.cfg.in` and `plugins.cfg.in` are CMake templates, found in Engine\CMake\Templates.  
-- Additional engine/game config JSON or INI files can go here.  
-- Developers usually customize these locally by generating or copying into `bin/Data/`.
-
----
-
-### \Scripts
-Helper scripts for build, deployment, and packaging, will probably include the main build script later.
-
----
-
-## Build Outputs
-
-- **build/** -> CMake build directory (ignored by Git).  
-- **bin/** -> Output executables and runtime data (ignored by Git).  
-
----
-
-## Git LFS (Planned)
-
-Currently, all assets are tracked normally in Git.  
-When the project grows (large textures, models, audio), we will migrate heavy files in `Assets/` to [Git LFS](https://git-lfs.com/) or other asset management solutions.
-
-Typical future rules are already in the .gitattributes
-
-
-# Ogre-next CmakeLists.txt Build Options
-(Yellow highlighted text indicates features likely to be toggled between builds)
-
-(Red highlighted text indicates deprecated features)
-
-(Asterisk before the variable name indicates a new change)
-
-## Debug/General
-| **Variable**                             | **Type / Values**            | **Set Value** | **Description**                                                                              |
-| ---------------------------------------- | ---------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `OGRE_ASSERT_MODE`                       | STRING (0, 1, 2)             | `0`                          | Runtime assert handling: `0=off`, `1=abort`, `2=throw exception`.                            |
-| `OGRE_DEBUG_LEVEL_DEBUG`                 | STRING (0-3)                 | `3`                          | Debug build logging level (verbosity).                                                       |
-| `OGRE_DEBUG_LEVEL_RELEASE`               | STRING (0-3)                 | `0`                          | Release build logging level.                                                                 |
-| `OGRE_EMBED_DEBUG_MODE`                  | STRING (`auto`, `on`, `off`) | `auto`                       | Whether debug symbols/resources are embedded in executables.                                 |
-| `OGRE_PROFILING_EXHAUSTIVE`              | BOOL                         | `OFF`                        | <mark>Enables more detailed but slower CPU/GPU profiling.</mark>                             |
-| `OGRE_PROFILING_TEXTURES`                | BOOL                         | `OFF`                        | <mark>Tracks GPU texture memory usage in profiles.</mark>                                    |
-| *`OGRE_SHADER_COMPILATION_THREADING_MODE` | STRING (0, 1, 2)             | `2`                          | Shader compilation threading: `0=single-threaded`, `1=background async`, `2=multi-threaded`. |
-| `OGRE_RESTRICT_ALIASING`                 | BOOL                         | `ON`                         | Adds compiler flags to assume strict aliasing rules (better optimization).                   |
-
-## Components
-| **Variable**                              | **Type / Values** | **Set Value** | **Description**                                                    |
-| ----------------------------------------- | -------- | ----------- | ------------------------------------------------------------------ |
-| `OGRE_BUILD_COMPONENT_ATMOSPHERE`         | BOOL     | `ON`        | Builds atmosphere & sky scattering component.                      |
-| `OGRE_BUILD_COMPONENT_HLMS_PBS`           | BOOL     | `ON`        | Builds HLMS (High Level Material System) Physically Based Shading. |
-| `OGRE_BUILD_COMPONENT_HLMS_UNLIT`         | BOOL     | `ON`        | Builds HLMS Unlit shading system.                                  |
-| `OGRE_BUILD_COMPONENT_MESHLODGENERATOR`   | BOOL     | `ON`        | Builds mesh LOD (level-of-detail) generator.                       |
-| `OGRE_BUILD_COMPONENT_OVERLAY`            | BOOL     | `ON`        | Builds overlay system (2D HUD/UI).                                 |
-| `OGRE_BUILD_COMPONENT_PAGING`             | BOOL    | `OFF`        | <span style="color: red;">DEPRECATED. Builds paging/streaming terrain system.</span>                            |
-| `OGRE_BUILD_COMPONENT_TERRAIN`             | BOOL   | `OFF`        | <span style="color: red;">DEPRECATED. Builds Terrain component within the Ogre-Next engine (Heightmap-based terrain, Level of Detail (LOD), Layered texturing, Paging system).</span>                            |
-| *`OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS` | BOOL    | `ON`        | Builds planar reflections component.                               |
-| `OGRE_BUILD_COMPONENT_PROPERTY`           | BOOL     | `ON`        | Builds property system (serialization/config helpers).             |
-| `OGRE_BUILD_COMPONENT_SCENE_FORMAT`       | BOOL     | `ON`        | Enables scene format import/export component.                      |
-| `OGRE_BUILD_COMPONENT_VOLUME`             | BOOL     | `OFF`       | Builds volume rendering support.                                   |
-
-## Plugins
-| **Variable**             | **Type / Values** | **Set Value** | **Description**                              |
-| ------------------------ | -------- | ----------- | -------------------------------------------- |
-| `OGRE_BUILD_PLUGIN_PFX`  | BOOL     | `ON`        | Builds legacy particle effects plugin.       |
-| `OGRE_BUILD_PLUGIN_PFX2` | BOOL     | `ON`        | Builds newer particle effects plugin (PFX2). |
-
-## Render Systems
-| **Variable**                      | **Type / Values**      | **Set Value** | **Description**                                    |
-| --------------------------------- | ------------- | ----------- | -------------------------------------------------- |
-| `OGRE_BUILD_RENDERSYSTEM_D3D11`   | BOOL          | `ON`        | Build Direct3D11 render system (Windows only).     |
-| `OGRE_BUILD_RENDERSYSTEM_GL3PLUS` | BOOL          | `ON`        | Build modern OpenGL 3+ render system.              |
-| `OGRE_BUILD_RENDERSYSTEM_GLES2`   | BOOL          | `OFF`       | Build OpenGL ES 2 render system.                   |
-| `OGRE_BUILD_RENDERSYSTEM_VULKAN`  | BOOL          | `ON`        | Build Vulkan render system.                        |
-| `OGRE_VULKAN_SDK`                 | STRING (path) | *(empty)*   | Path to Vulkan SDK (if not autodetected).          |
-| `OGRE_VULKAN_WINDOW_NULL`         | BOOL          | `OFF`       | Enables Vulkan offscreen/null window backend.      |
-| `OGRE_VULKAN_WINDOW_WIN32`        | BOOL          | `ON`        | Enables Vulkan Win32 window backend.               |
-| `OGRE_GLSUPPORT_USE_WGL`          | BOOL          | `ON`        | Use Windows WGL instead of EGL for OpenGL context. |
-
-## Build Systems
-| **Variable**                | **Type / Values**     | **Set Value** | **Description**                                                |
-| --------------------------- | ------------ | ----------- | -------------------------------------------------------------- |
-| `OGRE_BUILD_MSVC_MP`        | BOOL         | `ON`        | Enable `/MP` (multi-processor compilation) in MSVC.            |
-| `OGRE_BUILD_MSVC_ZM`        | BOOL         | `ON`        | Enable `/Zm` MSVC option (increase precompiled header memory). |
-| `OGRE_BUILD_SAMPLES2`       | BOOL         | `ON`        | Builds Ogre 2.x sample browser.                                |
-| `OGRE_BUILD_TESTS`          | BOOL         | `OFF`       | Builds unit tests.                                             |
-| `OGRE_BUILD_TOOLS`          | BOOL         | `ON`        | Builds tools (e.g., MeshUpgrader, HlmsJson).                   |
-| `OGRE_UNITY_BUILD`          | BOOL         | `OFF`       | Enable unity builds (compile multiple source files together).  |
-| `OGRE_UNITY_FILES_PER_UNIT` | STRING (int) | `50`        | Number of files per unity build unit.                          |
-| `OGRE_USE_NEW_PROJECT_NAME` | BOOL         | `ON`        | Use `OgreNext` as project name instead of `OGRE`.              |
-| `OGRE_STATIC`               | BOOL         | `OFF`       | Build static instead of shared libraries.                      |
-
-## Config/Features
-| **Variable**                            | **Type / Values**                        | **Set Value** | **Description**                                                   |
-| --------------------------------------- | ------------------------------- | ----------- | ----------------------------------------------------------------- |
-| `OGRE_CONFIG_AMD_AGS`                   | BOOL                            | `ON`        | Enable AMD AGS (GPU extensions library) support.                  |
-| `OGRE_CONFIG_ENABLE_JSON`               | BOOL                            | `ON`        | Enable JSON scene/material support.                               |
-| `OGRE_CONFIG_ENABLE_QUAD_BUFFER_STEREO` | BOOL                            | `OFF`       | Enable quad-buffered stereo rendering (3D displays).              |
-| `OGRE_CONFIG_THREADS`                   | STRING (0,1,2,3)                | `0`         | <span style="color: red;">Threading model: `0=none`, `1=std::thread`, `2=TBB`, `3=pthread`. In Ogre 2.x and beyond, a different, more scalable multithreading system is used. This newer system is enabled by default and does not require CMake configuration. Instead, you control it directly in your code when creating a SceneManager by specifying the number of worker threads. </span> |
-| `OGRE_CONFIG_THREAD_PROVIDER`           | STRING (`none`, `tbb`, `boost`) | `none`      | <span style="color: red;">Choose threading backend. This configuration option only applies if you enable threading through the older OGRE_CONFIG_THREADS setting. It tells Ogre which external library to use to manage the background threads for resource loading and preparation. In contemporary Ogre-Next versions (2.1+), threading is automatically managed and does not rely on OGRE_CONFIG_THREAD_PROVIDER. The engine's high-performance, Data-Oriented Design uses multithreading for tasks like frustum culling, batch processing, and other performance-critical operations. As a user, you get full control over the number of worker threads by specifying it when you create a SceneManager instance. This approach is faster, more scalable, and simplifies the build process.</span>                                         |
-| `OGRE_IDSTRING_ALWAYS_READABLE`         | BOOL                            | `OFF`       | <mark>Force ID strings to be readable instead of hashed. </mark>               |
-| `OGRE_IDSTRING_USE_128`                 | BOOL                            | `OFF`       | <mark>Use 128-bit IDs for object identifiers. </mark>                          |
-| `OGRE_SIMD_NEON`                        | BOOL                            | `ON`        | Enable ARM NEON SIMD intrinsics. Used on mobile phones and single-board computers.                                 |
-| `OGRE_SIMD_SSE2`                        | BOOL                            | `ON`        | Enable SSE2 SIMD intrinsics.                                      |
-
-## Install/Deployment
-| **Variable**                | **Type / Values** | **Set Value**        | **Description**                                   |
-| --------------------------- | -------- | ------------------ | ------------------------------------------------- |
-| `OGRE_COPY_DEPENDENCIES`    | BOOL     | `ON`               | Copy dependency binaries into build/install tree. |
-| `OGRE_DEPENDENCIES_DIR`     | PATH     | *(your deps path)* | Root directory of dependencies.                   |
-| `OGRE_INSTALL_DEPENDENCIES` | BOOL     | `ON`               | Install dependency binaries alongside Ogre.                      |
-| `OGRE_INSTALL_DOCS`         | BOOL     | `ON`               | Install documentation.                            |
-| `OGRE_INSTALL_PDB`          | BOOL     | `ON`               | Install MSVC `.pdb` debug symbol files.           |
-| `OGRE_INSTALL_SAMPLES`      | BOOL     | `ON`               | Install sample data and binaries.                 |
-| `OGRE_INSTALL_TOOLS`        | BOOL     | `ON`               | Install tools.                                    |
-| *`OGRE_INSTALL_VSPROPS`      | BOOL     | `ON`              | <mark>Install Visual Studio property sheets. </mark>           |
+- `src/OgreCommon/` and `include/OgreCommon/` are Ogre-Next's sample framework,
+  included upstream and unmodified, under Ogre-Next's MIT license.
+- `docs/ogre-next-build-options.md` records the CMake options used to configure
+  the Ogre-Next dependency.
+- `build/` and `bin/` are build outputs and are not tracked.
